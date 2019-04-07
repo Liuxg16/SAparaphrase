@@ -1,0 +1,16 @@
+python source/run.py --datadir=datasets/kinship/  --exps_dir=exps-py/ --exp_name=test1-model1-lr0.05  --learning_rate 0.05  --batch_size 2000   --model 5  --num_layer 1  --accumulate_step 100 --no_cuda
+
+
+best:
+python source/run.py --datadir=datasets/kinship/  --exps_dir=exps-py/ --exp_name=test  --learning_rate 0.01  --batch_size 500   --model 1  --num_layer 1  --accumulate_step 1
+
+CUDA_VISIBLE_DEVICES=3 nohup  python source/run.py --datadir=datasets/wn-18/  --exps_dir=exps-py/ --exp_name=wntest-layer2  --learning_rate 0.01  --batch_size 1   --model 1  --num_layer 2  --local --maxlinks 266  --load ~/Neural-LP/exps0130/wn/ckpt/model-overfit.pkl  --no_train --gpu 2 &
+
+# test
+python source/run.py --datadir=datasets/wn-18/  --exps_dir=exps-py/ --exp_name=wntest-layer6-0220  --learning_rate 0.01  --batch_size 1   --model 1  --num_layer 1  --local --maxlinks 40000  --load exps-py/wn-layer6/ckpt/model-overfit.pkl  --no_train  --no_cuda
+
+
+new best:
+
+nohup python source/run.py --datadir=datasets/wn-18/  --exps_dir=exps-py/ --exp_name=wntest0225-sp   --learning_rate 0.01  --batch_size 1   --model 1  --num_layer 1  --local --maxlinks 400000  --load exps-py/wn-layer6/ckpt/model-overfit.pkl  --no_train --no_cuda  &
+python eval/evaluate.py --preds=exps-py/wntest0225-sp/test_predictions.txt  --truths=datasets/wn-18/truths.pckl

@@ -1,0 +1,8 @@
+exps
+data
+POS
+*.log
+*.pkl
+*.txt
+*.pyc
+paraphrase
