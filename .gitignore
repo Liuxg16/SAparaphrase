@@ -5,4 +5,5 @@ POS
 *.pkl
 *.txt
 *.pyc
+*.swp
 paraphrase

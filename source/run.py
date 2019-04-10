@@ -7,6 +7,7 @@ import numpy as np
 import data
 from experiment import Experiment
 from models import  *
+from simulateAnnealing import  metropolisHasting
 
 class Option(object):
     def __init__(self, d):
@@ -32,11 +33,12 @@ def main():
     parser.add_argument('--load', default=None, type=str)
     # data property
     parser.add_argument('--data_path', default='data/quora/quora.txt', type=str)
+    parser.add_argument('--use_data_path', default='data/input/input.txt', type=str)
     parser.add_argument('--dict_path', default='data/quora/dict.pkl', type=str)
     parser.add_argument('--dict_size', default=300000, type=int)
     parser.add_argument('--vocab_size', default=300003, type=int)
     parser.add_argument('--backward', default=False, action="store_true")
-    parser.add_argument('--no_link_percent', default=0., type=float)
+    parser.add_argument('--keyword_pos', default=True, action="store_false")
     parser.add_argument('--type_check', default=False, action="store_true")
     parser.add_argument('--domain_size', default=128, type=int)
     parser.add_argument('--no_extra_facts', default=False, action="store_true")
@@ -48,6 +50,7 @@ def main():
     parser.add_argument('--emb_size', default=256, type=int)
     parser.add_argument('--hidden_size', default=256, type=int)
     parser.add_argument('--dropout', default=0.0, type=float)
+    parser.add_argument('--model', default=0, type=int)
     # optimization
     parser.add_argument('--batch_size', default=64, type=int)
     parser.add_argument('--print_per_batch', default=3, type=int)
@@ -60,16 +63,27 @@ def main():
     parser.add_argument('--no_cuda', default=False, action="store_true")
     parser.add_argument('--local', default=False, action="store_true")
     parser.add_argument('--thr', default=1e-20, type=float)
+
     # evaluation
-    parser.add_argument('--get_phead', default=False, action="store_true")
+    parser.add_argument('--sim', default='word_max', type=str)
+    parser.add_argument('--mode', default='sa', type=str)
     parser.add_argument('--get_attentions', default=False, action="store_true")
     parser.add_argument('--adv_rank', default=False, action="store_true")
     parser.add_argument('--rand_break', default=False, action="store_true")
     parser.add_argument('--accuracy', default=False, action="store_true")
     parser.add_argument('--top_k', default=10, type=int)
-    parser.add_argument('--model', default=0, type=int)
-    parser.add_argument('--maxlinks', default=1500, type=int)
     parser.add_argument('--accumulate_step', default=1, type=int)
+    parser.add_argument('--backward_path', default=None, type=str)
+    parser.add_argument('--forward_path', default=None, type=str)
+
+    # sampling
+    parser.add_argument('--pos_path', default='POS/english-models', type=str)
+    parser.add_argument('--emb_path', default='data/quora/emb.pkl', type=str)
+    parser.add_argument('--max_key', default=3, type=float)
+    parser.add_argument('--max_key_rate', default=0.5, type=float)
+    parser.add_argument('--rare_since', default=300000, type=int)
+    parser.add_argument('--sample_time', default=100, type=int)
+    parser.add_argument('--action_prob', default=[0.33,0.33,0.33], type=list)
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -77,6 +91,7 @@ def main():
     random.seed(option.seed)
     np.random.seed(option.seed)
     torch.manual_seed(option.seed)
+    os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
 
 
     if option.exp_name is None:
@@ -102,7 +117,6 @@ def main():
     print("Option saved.")
 
     device = torch.device("cuda" if torch.cuda.is_available() and not option.no_cuda else "cpu")
-    os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
     n_gpu = torch.cuda.device_count()
 
     if option.model == 0:
@@ -121,13 +135,21 @@ def main():
         print("Start training...")
         experiment.train()
     
-    if not option.no_preds:
-        print("Start getting test predictions...")
-        experiment.get_performance()
-        experiment.get_predictions()
+    if option.mode == 'sa':
+        sa(option)
+    elif option.mode == 'mh':
+        forwardmodel = RNNModel(option).cuda()
+        backwardmodel = RNNModel(option).cuda()
+        if option.forward_path is  not None: 
+            with open(option.forward_path, 'rb') as f:
+                forwardmodel.load_state_dict(torch.load(f))
 
-    if option.get_attentions:
-        experiment.get_attentions()
+        if option.backward_path is  not None: 
+            with open(option.backward, 'rb') as f:
+                backwardmodel.load_state_dict(torch.load(f))
+        forwardmodel.eval()
+        backwardmodel.eval()
+        metropolisHasting(option, dataclass, forwardmodel, backwardmodel)
 
     print("="*36 + "Finish" + "="*36)
 

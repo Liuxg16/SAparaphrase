@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from torch_sparse import spspmm, coalesce, spmm, transpose
 import time
-import torch.nn as nn
 
 class RNNModel(nn.Module):
 	"""Container module with an encoder, a recurrent module, and a decoder."""
@@ -53,6 +51,23 @@ class RNNModel(nn.Module):
 		v,idx = torch.max(decoded,1)
 		acc = torch.mean(torch.eq(idx,target).float())
 		return loss,acc, decoded.view(batch_size, length, self.ntoken)
+
+	def predict(self, input):
+		'''
+		bs,15; bs,15
+		'''
+		batch_size = input.size(0)
+		length = input.size(1)
+
+		emb = self.drop(self.encoder(input))
+		c0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
+		h0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
+		output, hidden = self.rnn(emb, (c0,h0))
+		output = self.drop(output).contiguous().view(batch_size*length,-1)
+		decoded = nn.Softmax(1)(self.decoder(output))
+		return decoded.view(batch_size, length, self.ntoken)
+
+
 
 	def init_hidden(self, bsz):
 		weight = next(self.parameters())
