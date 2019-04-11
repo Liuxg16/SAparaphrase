@@ -121,9 +121,10 @@ def similarity(s1,s2, sta_vec, id2sen, emb_word, option):
     norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e))
     sim_mat=np.dot(norm2,emb_mat).dot(norm1)
     sim_vec=sim_mat.max(axis=1)
-    #sim=(sim_vec*wei2).sum()
-    # print('sss',sim_vec*wei2)
-    sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
+    # print('sss',sim_vec)
+    # print wei2
+    # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
+    sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
     # sim=(sim_vec).mean()
     return sigma_word(sim)
 
@@ -165,7 +166,7 @@ def generate_candidate_input(input, sequence_length, ind, prob, search_size, opt
     length=sequence_length[0]-1
     if mode!=2:
         ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
-        #print ind_token
+        # print ind_token
     
     if mode==2:
         for i in range(sequence_length[0]-ind-2):
@@ -198,9 +199,6 @@ def just_acc(option):
     else:
         return 1
 
-    
-
-
 def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
     emb_word,emb_id=pkl.load(open(option.emb_path))
@@ -227,9 +225,7 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
             ind=pos%(sequence_length[0]-1)
             action=choose_action(option.action_prob)
 
-            print 'pos,', ind
             if action==0: # word replacement (action: 0)
-
                 prob_old= output_p(input, forwardmodel) #15,K
                 tem=1
                 for j in range(sequence_length[0]-1):
@@ -276,10 +272,8 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                     else:
                         input= input1
                         print(' '.join(id2sen(input[0])))
-                        print input[0]
 
             elif action==1: # word insert
-
                 if sequence_length[0]>=option.num_steps:
                     pos += 1
                     break
@@ -332,12 +326,87 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                         (prob_candidate_prob>prob_old_prob* option.threshold or just_acc(option)==0):
                     input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                     sequence_length+=1
-                    pos+=2
+                    pos+=1
                     sta_vec.insert(ind, 0.0)
                     del(sta_vec[-1])
+                    print(' '.join(id2sen(input[0]))) 
 
-                    print input[0]
+            elif action==2: # word delete
+                if sequence_length[0]<=2:
+                    pos += 1
+                    break
+
+                prob_old = output_p(input, forwardmodel)
+                tem=1
+                for j in range(sequence_length[0]-1):
+                    tem*=prob_old[j][input[0][j+1]]
+                tem*=prob_old[j+1][option.dict_size+1]
+                prob_old_prob=tem
+                if sim!=None:
+                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, option)
+                    prob_old_prob=prob_old_prob*similarity_old
+                else:
+                    similarity_old=-1
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, None, option.search_size, option, mode=action)
+
+                # delete sentence
+                prob_new = output_p(input_candidate, forwardmodel)
+                tem=1
+                for j in range(sequence_length_candidate[0]-1):
+                    tem*=prob_new[j][input_candidate[0][j+1]]
+                tem*=prob_new[j+1][option.dict_size+1]
+                prob_new_prob=tem
+                if sim!=None:
+                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option)
+                    prob_new_prob=prob_new_prob*similarity_candidate
+                
+                # original sentence
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=0)
+                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=0)
+                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+
+                prob_candidate=[]
+                for i in range(option.search_size):
+                    tem=1
+                    for j in range(sequence_length[0]-1):
+                        tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                    tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                    prob_candidate.append(tem)
+                prob_candidate=np.array(prob_candidate)
+            
+                if sim!=None:
+                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option)
+                    prob_candidate=prob_candidate*similarity_candidate
+            
+                prob_candidate_norm=normalize(prob_candidate)
+                #alpha is acceptance ratio of current proposal
+                if input[0] in input_candidate:
+                    for candidate_ind in range(len(input_candidate)):
+                        if input[0] in input_candidate[candidate_ind: candidate_ind+1]:
+                            break
+                        pass
+                    alpha=min(prob_candidate_norm[candidate_ind]*prob_new_prob*option.action_prob[1]/(option.action_prob[2]*prob_old_prob), 1)
+                else:
+                    alpha=0
+             
+                if choose_action([alpha, 1-alpha])==0 and (prob_new_prob> prob_old_prob*option.threshold or just_acc(option)==0):
+                    input=np.concatenate([input[:,:ind+1], input[:,ind+2:], input[:,:1]*0+option.dict_size+1], axis=1)
+                    sequence_length-=1
+                    del(sta_vec[ind])
+                    sta_vec.append(0)
+
+                    pos -= 1
                     print(' '.join(id2sen(input[0])))
-
 
             pos += 1
