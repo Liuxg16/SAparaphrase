@@ -4,6 +4,7 @@ from zpar import ZPar
 from data import array_data
 import torch
 import pickle as pkl
+from copy import copy
 
 def output_p(sent, model):
     # list
@@ -129,7 +130,75 @@ def similarity(s1,s2, sta_vec, id2sen, emb_word, option):
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
+def similarity_batch(s1, s2, sta_vec, id2sen, emb_word, option):
+    return np.array([ similarity(x,s2,sta_vec, id2sen, emb_word, option) for x in s1 ])
 
+
+def cut_from_point(input, sequence_length, ind,option, mode=0):
+    batch_size=input.shape[0]
+    num_steps=input.shape[1]
+    input_forward=np.zeros([batch_size, num_steps])+option.dict_size+1
+    input_backward=np.zeros([batch_size, num_steps])+option.dict_size+1
+    sequence_length_forward=np.zeros([batch_size])
+    sequence_length_backward=np.zeros([batch_size])
+    for i in range(batch_size):
+        input_forward[i][0]=option.dict_size+2
+        input_backward[i][0]=option.dict_size+2
+        length=sequence_length[i]-1
+
+        for j in range(ind):
+            input_forward[i][j+1]=input[i][j+1]
+        sequence_length_forward[i]=ind+1
+        if mode==0:
+            for j in range(length-ind-1):
+                input_backward[i][j+1]=input[i][length-j]
+            sequence_length_backward[i]=length-ind
+        elif mode==1:
+            for j in range(length-ind):
+                input_backward[i][j+1]=input[i][length-j]
+            sequence_length_backward[i]=length-ind+1
+    return input_forward.astype(np.int32), input_backward.astype(np.int32), sequence_length_forward.astype(np.int32), sequence_length_backward.astype(np.int32)
+   
+def generate_candidate_input(input, sequence_length, ind, prob, search_size, option, mode=0):
+    input_new=np.array([input[0]]*search_size)
+    sequence_length_new=np.array([sequence_length[0]]*search_size)
+    length=sequence_length[0]-1
+    if mode!=2:
+        ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
+        #print ind_token
+    
+    if mode==2:
+        for i in range(sequence_length[0]-ind-2):
+            input_new[: , ind+i+1]=input_new[: , ind+i+2]
+        for i in range(sequence_length[0]-1, option.num_steps-1):
+            input_new[: , i]=input_new[: , i]*0+option.dict_size+1
+        sequence_length_new=sequence_length_new-1
+        return input_new[:1], sequence_length_new[:1]
+    if mode==1:
+        for i in range(0, sequence_length_new[0]-1-ind):
+            input_new[: , sequence_length_new[0]-i]=input_new[: ,  sequence_length_new[0]-1-i]
+        sequence_length_new=sequence_length_new+1
+    for i in range(search_size):
+        input_new[i][ind+1]=ind_token[i]
+    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
+
+def normalize(x, e=0.05):
+    tem = copy(x)
+    if max(tem)==0:
+        tem+=e
+    return tem/tem.sum()
+
+def sample_from_candidate(prob_candidate):
+    return choose_action(normalize(prob_candidate))
+
+def just_acc(option):
+    r=np.random.random()
+    if r<option.just_acc_rate:
+        return 0
+    else:
+        return 1
+
+    
 
 
 def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
@@ -157,14 +226,14 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
             #ind is the index of the selected word, regardless of the beginning token.
             ind=pos%(sequence_length[0]-1)
             action=choose_action(option.action_prob)
-            print(' '.join(id2sen(input[0])))
 
-            # word replacement (action: 0)
-            if action==0: 
+            print 'pos,', ind
+            if action==0: # word replacement (action: 0)
+
                 prob_old= output_p(input, forwardmodel) #15,K
                 tem=1
                 for j in range(sequence_length[0]-1):
-                  tem*=prob_old[j][input[0][j+1]]
+                    tem*=prob_old[j][input[0][j+1]]
                 tem*=prob_old[j+1][option.dict_size+1]
                 prob_old_prob=tem
                 if sim!=None:
@@ -172,4 +241,103 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                   prob_old_prob*=similarity_old
                 else:
                   similarity_old=-1
-                print math.log(prob_old_prob)
+
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=action)
+                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=action)
+                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+                prob_candidate=[]
+                for i in range(option.search_size):
+                  tem=1
+                  for j in range(sequence_length[0]-1):
+                    tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                  tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                  prob_candidate.append(tem)
+          
+                prob_candidate=np.array(prob_candidate)
+                if sim!=None:
+                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option)
+                    prob_candidate=prob_candidate*similarity_candidate
+                prob_candidate_norm=normalize(prob_candidate)
+                prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+                prob_candidate_prob=prob_candidate[prob_candidate_ind]
+                if input_candidate[prob_candidate_ind][ind+1]<option.dict_size and\
+                        (prob_candidate_prob>prob_old_prob*option.threshold or just_acc(option)==0):
+                    input1=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                    if np.sum(input1[0])==np.sum(input[0]):
+                        pass
+                    else:
+                        input= input1
+                        print(' '.join(id2sen(input[0])))
+                        print input[0]
+
+            elif action==1: # word insert
+
+                if sequence_length[0]>=option.num_steps:
+                    pos += 1
+                    break
+
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=action)
+                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=action)
+
+                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+
+                prob_candidate=[]
+                for i in range(option.search_size):
+                    tem=1
+                    for j in range(sequence_length_candidate[0]-1):
+                        tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                    tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                    prob_candidate.append(tem)
+                prob_candidate=np.array(prob_candidate)
+                if sim!=None:
+                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option)
+                    prob_candidate=prob_candidate*similarity_candidate
+                prob_candidate_norm=normalize(prob_candidate)
+                prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+                prob_candidate_prob=prob_candidate[prob_candidate_ind]
+
+                prob_old = output_p(input, forwardmodel) # 100,15,300003
+
+                tem=1
+                for j in range(sequence_length[0]-1):
+                    tem*=prob_old[j][input[0][j+1]]
+                tem*=prob_old[j+1][option.dict_size+1]
+                prob_old_prob=tem
+                if sim!=None:
+                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, option)
+                    prob_old_prob=prob_old_prob*similarity_old
+                else:
+                    similarity_old=-1
+                #alpha is acceptance ratio of current proposal
+                alpha=min(1, prob_candidate_prob*option.action_prob[2]/(prob_old_prob*option.action_prob[1]*prob_candidate_norm[prob_candidate_ind]))
+            
+                if choose_action([alpha, 1-alpha])==0 and \
+                        input_candidate[prob_candidate_ind][ind]<option.dict_size and \
+                        (prob_candidate_prob>prob_old_prob* option.threshold or just_acc(option)==0):
+                    input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                    sequence_length+=1
+                    pos+=2
+                    sta_vec.insert(ind, 0.0)
+                    del(sta_vec[-1])
+
+                    print input[0]
+                    print(' '.join(id2sen(input[0])))
+
+
+            pos += 1

@@ -92,8 +92,8 @@ class Experiment():
                 loss, acc, outputs = self.learner(data, target)
             epoch_loss += [loss.item()]
             epoch_in_top += [acc.item()]
-            msg = 'intop:{}'.format(np.mean(epoch_loss))
-            print msg
+            # msg = 'intop:{}'.format(np.mean(epoch_loss))
+            # print msg
             # self.write_log_file(msg)
 
 
@@ -331,8 +331,6 @@ class Experiment():
         print(msg)
         self.write_log_file(msg + "\n")
 
-
-
     def get_attentions(self, threshold = 0.001):
         number2relation = {v:k for k,v in self.data.relation_to_number.items()}
 
@@ -362,9 +360,6 @@ class Experiment():
                                     getrel(number2relation,i/self.data.num_operator)),
 
                     print
-
-
-
 
     def get_rules(self):
         all_attention_operators, all_attention_memories, queries = self.get_attentions()

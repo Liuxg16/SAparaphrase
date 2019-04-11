@@ -36,7 +36,6 @@ class RNNModel(nn.Module):
 		'''
 		bs,15; bs,15
 		'''
-
 		batch_size = input.size(0)
 		length = input.size(1)
 		target = target.view(-1)

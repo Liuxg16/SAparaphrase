@@ -11,6 +11,7 @@ class Dicts(object):
         self.Dict1, self.Dict2=pkl.load(open(dict_path,'rb'))
         self.vocab_size=len(self.Dict1)+3
         self.UNK=self.vocab_size-3
+        print self.UNK
         self.BOS=self.vocab_size-1
         self.EOS=self.vocab_size-2
         
@@ -69,7 +70,17 @@ class Data(object):
             with open(file_name) as f:
                 data=[]
                 for line in f:
-                    data.append(self.sen2id(line.strip().split()))
+                    line = line.strip().lower()
+                    # clear
+                    line = line.replace('?',' ')
+                    line = line.replace('(',' ')
+                    line = line.replace(')',' ')
+                    line = line.replace('-',' ')
+                    line = line.replace('!',' ')
+                    line = line.replace('\.',' ')
+                    line = line.replace(',',' ')
+                    line = line.replace(';',' ')
+                    data.append(self.sen2id(line.split()))
         train_data=array_data(data[ : int(len(data)*(tt_proportion-0.05))], max_length, dict_size, shuffle=True)
         valid_data=array_data(data[int(len(data)*(tt_proportion-0.05)): int(len(data)*tt_proportion)], max_length, dict_size, shuffle=True)
         test_data=array_data(data[int(len(data)*tt_proportion) : ], max_length, dict_size, shuffle=True)

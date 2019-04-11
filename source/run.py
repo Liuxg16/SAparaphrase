@@ -35,8 +35,8 @@ def main():
     parser.add_argument('--data_path', default='data/quora/quora.txt', type=str)
     parser.add_argument('--use_data_path', default='data/input/input.txt', type=str)
     parser.add_argument('--dict_path', default='data/quora/dict.pkl', type=str)
-    parser.add_argument('--dict_size', default=300000, type=int)
-    parser.add_argument('--vocab_size', default=300003, type=int)
+    parser.add_argument('--dict_size', default=30000, type=int)
+    parser.add_argument('--vocab_size', default=30003, type=int)
     parser.add_argument('--backward', default=False, action="store_true")
     parser.add_argument('--keyword_pos', default=True, action="store_false")
     parser.add_argument('--type_check', default=False, action="store_true")
@@ -83,7 +83,10 @@ def main():
     parser.add_argument('--max_key_rate', default=0.5, type=float)
     parser.add_argument('--rare_since', default=300000, type=int)
     parser.add_argument('--sample_time', default=100, type=int)
+    parser.add_argument('--search_size', default=100, type=int)
     parser.add_argument('--action_prob', default=[0.33,0.33,0.33], type=list)
+    parser.add_argument('--threshold', default=0.1, type=float)
+    parser.add_argument('--just_acc_rate', default=0.0, type=float)
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -145,7 +148,7 @@ def main():
                 forwardmodel.load_state_dict(torch.load(f))
 
         if option.backward_path is  not None: 
-            with open(option.backward, 'rb') as f:
+            with open(option.backward_path, 'rb') as f:
                 backwardmodel.load_state_dict(torch.load(f))
         forwardmodel.eval()
         backwardmodel.eval()
