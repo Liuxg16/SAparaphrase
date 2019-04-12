@@ -5,9 +5,6 @@ import pickle
 from collections import Counter
 import numpy as np
 import torch
-from utils import list_rules, print_rules
-
-from optimization import BertAdam
 import torch
 import torch.nn as nn
 

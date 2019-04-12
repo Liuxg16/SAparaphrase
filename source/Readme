@@ -1,3 +1,6 @@
+# data
+quora:https://www.kaggle.com/c/quora-question-pairs/data
+
 # training
 nohup python source/run.py  --exps_dir exps  --exp_name forward  --gpu 3   --hidden_size 512 --batch_size 64 --dropout 0.2  &
 

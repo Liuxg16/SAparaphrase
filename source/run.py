@@ -7,6 +7,7 @@ import numpy as np
 import data
 from experiment import Experiment
 from models import  *
+from utils import get_corpus_bleu_scores, savetexts
 from simulateAnnealing import  metropolisHasting, simulatedAnnealing
 
 class Option(object):
@@ -33,7 +34,6 @@ def main():
     parser.add_argument('--load', default=None, type=str)
     # data property
     parser.add_argument('--data_path', default='data/quora/quora.txt', type=str)
-    parser.add_argument('--use_data_path', default='data/input/input.txt', type=str)
     parser.add_argument('--dict_path', default='data/quora/dict.pkl', type=str)
     parser.add_argument('--dict_size', default=30000, type=int)
     parser.add_argument('--vocab_size', default=30003, type=int)
@@ -77,6 +77,8 @@ def main():
     parser.add_argument('--forward_path', default=None, type=str)
 
     # sampling
+    parser.add_argument('--use_data_path', default='data/input/input.txt', type=str)
+    parser.add_argument('--reference_path', default=None, type=str)
     parser.add_argument('--pos_path', default='POS/english-models', type=str)
     parser.add_argument('--emb_path', default='data/quora/emb.pkl', type=str)
     parser.add_argument('--max_key', default=3, type=float)
@@ -150,7 +152,18 @@ def main():
                 backwardmodel.load_state_dict(torch.load(f))
         forwardmodel.eval()
         backwardmodel.eval()
-        simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel)
+        generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel)
+        savetexts(generated_word_lists,'generated.txt')
+        # Evaluate model scores
+        if option.reference_path is not None:
+            actual_word_lists = []
+            with open(option.reference_path) as f:
+                for line in f:
+                    actual_word_lists.append([line.strip().split()])
+
+            bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
+            print 'bleu scores:', bleu_scores
+
 
     elif option.mode == 'mh':
         forwardmodel = RNNModel(option).cuda()

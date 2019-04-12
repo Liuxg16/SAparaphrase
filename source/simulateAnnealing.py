@@ -412,14 +412,14 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
             pos += 1
 
 def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
-
+    generated_sentence = []
     emb_word,emb_id=pkl.load(open(option.emb_path))
     sim=option.sim
     sta_vec=list(np.zeros([option.num_steps-1]))
 
     use_data, sta_vec_list = read_data_use(option, dataclass.sen2id)
     id2sen = dataclass.id2sen
-    C = 0.15 # 0.2
+    C = 0.2 # 0.2
     
     for sen_id in range(use_data.length):
         #generate for each sentence
@@ -549,7 +549,7 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
 
                 V_new = math.log(prob_candidate_prob+1e-50)
                 V_old = math.log(prob_old_prob+1e-50)
-                alphat = min(1,math.exp((V_new-V_old)/temperature))
+                alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
                 if sim_new<sim_old:
                     alphat = 0
                 if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size and (prob_candidate_prob>prob_old_prob* option.threshold):
@@ -600,7 +600,7 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                 V_old = math.log(prob_old_prob+1e-20)
                 alphat = min(1,math.exp((V_new-V_old)/temperature))
             
-                if sim_new<=sim_old:
+                if sim_new<sim_old:
                     alphat = 0
                       
                 if choose_action([alphat, 1-alphat])==0:
@@ -615,4 +615,6 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
 
 
             pos += 1
+        generated_sentence.append(id2sen(input[0]))
+    return generated_sentence
 

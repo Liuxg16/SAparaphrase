@@ -6,4 +6,5 @@ POS
 *.txt
 *.pyc
 *.swp
+*.tsv
 paraphrase
