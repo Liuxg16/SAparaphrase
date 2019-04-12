@@ -7,7 +7,7 @@ import numpy as np
 import data
 from experiment import Experiment
 from models import  *
-from simulateAnnealing import  metropolisHasting
+from simulateAnnealing import  metropolisHasting, simulatedAnnealing
 
 class Option(object):
     def __init__(self, d):
@@ -139,7 +139,19 @@ def main():
         experiment.train()
     
     if option.mode == 'sa':
-        sa(option)
+        forwardmodel = RNNModel(option).cuda()
+        backwardmodel = RNNModel(option).cuda()
+        if option.forward_path is  not None: 
+            with open(option.forward_path, 'rb') as f:
+                forwardmodel.load_state_dict(torch.load(f))
+
+        if option.backward_path is  not None: 
+            with open(option.backward_path, 'rb') as f:
+                backwardmodel.load_state_dict(torch.load(f))
+        forwardmodel.eval()
+        backwardmodel.eval()
+        simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel)
+
     elif option.mode == 'mh':
         forwardmodel = RNNModel(option).cuda()
         backwardmodel = RNNModel(option).cuda()
