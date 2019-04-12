@@ -617,7 +617,6 @@ class BertModel(PreTrainedBertModel):
             encoded_layers = encoded_layers[-1]
         return encoded_layers, pooled_output
 
-
 class BertForSequenceClassification(PreTrainedBertModel):
     """BERT model for classification.
     This module is composed of the BERT model with a linear layer on top of
@@ -684,7 +683,6 @@ class BertForSequenceClassification(PreTrainedBertModel):
             return loss
         else:
             return logits
-
 
 class BertForPreTraining(PreTrainedBertModel):
     """BERT model with pre-training heads.
@@ -756,7 +754,6 @@ class BertForPreTraining(PreTrainedBertModel):
         else:
             return prediction_scores, seq_relationship_score
 
-
 class BertForMaskedLM(PreTrainedBertModel):
     """BERT model with the masked language modeling head.
     This module comprises the BERT model followed by the masked language modeling head.
@@ -816,7 +813,6 @@ class BertForMaskedLM(PreTrainedBertModel):
             return masked_lm_loss
         else:
             return prediction_scores
-
 
 class BertForNextSentencePrediction(PreTrainedBertModel):
     """BERT model with next sentence prediction head.
@@ -878,8 +874,6 @@ class BertForNextSentencePrediction(PreTrainedBertModel):
             return next_sentence_loss
         else:
             return seq_relationship_score
-
-
 
 class BertForTokenClassification(PreTrainedBertModel):
     """BERT model for token-level classification.
@@ -945,7 +939,6 @@ class BertForTokenClassification(PreTrainedBertModel):
             return loss
         else:
             return logits
-
 
 class BertForQuestionAnswering(PreTrainedBertModel):
     """BERT model for Question Answering (span extraction).
@@ -1035,3 +1028,18 @@ class BertForQuestionAnswering(PreTrainedBertModel):
             return total_loss
         else:
             return start_logits, end_logits
+
+class SentenceBert(PreTrainedBertModel):
+
+    def __init__(self, config, num_labels=2):
+        super(SentenceBert, self).__init__(config)
+        self.num_labels = num_labels
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, num_labels)
+        self.apply(self.init_bert_weights)
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
+
+        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
+        return pooled_output
