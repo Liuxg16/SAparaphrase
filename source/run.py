@@ -1,4 +1,7 @@
-import os
+import os, sys
+sys.path.append('/home/liuxg/workspace/SAparaphrase/')
+sys.path.append('/home/liuxg/workspace/SAparaphrase/bert')
+sys.path.append('/home/liuxg/workspace/SAparaphrase/bert/pytorch_pretrained_bert')
 import argparse
 import time,random
 import torch
@@ -162,7 +165,7 @@ def main():
                     actual_word_lists.append([line.strip().split()])
 
             bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
-            print 'bleu scores:', bleu_scores
+            print('bleu scores:', bleu_scores)
 
 
     elif option.mode == 'mh':

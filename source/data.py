@@ -8,10 +8,11 @@ import utils, torch
 
 class Dicts(object):
     def __init__(self, dict_path):
-        self.Dict1, self.Dict2=pkl.load(open(dict_path,'rb'))
+        f = open(dict_path,'rb')
+        self.Dict1, self.Dict2=pkl.load(f, encoding = 'latin1')
+        f.close()
         self.vocab_size=len(self.Dict1)+3
         self.UNK=self.vocab_size-3
-        print self.UNK
         self.BOS=self.vocab_size-1
         self.EOS=self.vocab_size-2
         
@@ -140,7 +141,6 @@ def array_data(data,  max_length, dict_size, shuffle=False):
         data[i].append(dict_size+1)
     target=np.array(data).astype(np.int32)
     input=np.concatenate([np.ones([len(data), 1])*(dict_size+2), target[:, :-1]], axis=1).astype(np.int32)
-    print input.shape
     return dataset(input, sequence_length, target)
 
 class dataset(object):

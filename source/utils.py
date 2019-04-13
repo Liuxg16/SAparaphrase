@@ -60,4 +60,4 @@ def savetexts(sent_list, file_name):
 
 if __name__ == "__main__":
     sent = 'I 地方have999 a33)) pretty-computer.'
-    print clarify(sent)
+    print(clarify(sent))

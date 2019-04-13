@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -12,12 +13,9 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.modeling import BertForSequenceClassification,SentenceBert
-from pytorch_pretrained_bert.optimization import BertAdam
-from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+from pytorch_pretrained_bert.modeling import SentenceBert
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -381,6 +379,41 @@ def test():
 
     #tmp_eval_loss = model(input_ids, segment_ids, input_mask, label_ids)
 
+class BertEncoding():
+
+    def __init__(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
+        self.processor = SentProcessor()
+        bert_path = '/home/liuxg/.pytorch_pretrained_bert'
+        self.tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=True)
+
+        # Prepare model
+        self.model = SentenceBert.from_pretrained(bert_path)
+        self.model.to(self.device)
+        self.model.eval()
+
+    def get_encoding(self, sents, max_seq_length=15):
+        label_list = self.processor.get_labels()
+        eval_examples = self.processor.get_dev_examples(sents=sents)
+        for e in eval_examples:
+            print('----------------', e.text_a)
+        eval_features = convert_examples_to_features(
+            eval_examples, label_list, max_seq_length, self.tokenizer)
+        input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+
+        input_ids = input_ids.to(self.device)
+        input_mask = input_mask.to(self.device)
+        segment_ids = segment_ids.to(self.device)
+        representation = self.model(input_ids, segment_ids, input_mask) # 1,768
+        print(torch.mean(representation,1))
+
+        return representation
+
+
+
 
 def get_bert_encoding(sents, max_seq_length=15):
     # list of sentence
@@ -420,4 +453,5 @@ def get_bert_encoding(sents, max_seq_length=15):
 if __name__ == "__main__":
 
     sents = ['who343 do3+.. you 看like?','who do you like', 'who do you like most']
-    get_bert_encoding(sents)
+    bertencoding = BertEncoding()
+    bertencoding.get_encoding(sents)

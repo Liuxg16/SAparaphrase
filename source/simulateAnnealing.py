@@ -2,9 +2,10 @@ import numpy as np
 import RAKE, math
 from zpar import ZPar
 from data import array_data
-import torch
+import torch, sys,os
 import pickle as pkl
 from copy import copy
+from bert.bertinterface import BertEncoding
 
 def output_p(sent, model):
     # list
@@ -53,11 +54,12 @@ def read_data_use(option,  sen2id):
             sta_vec=list(np.zeros([option.num_steps-1]))
             keyword=Rake.run(line.strip())
             pos_list=tagger.tag_sentence(line.strip()).split()
-            pos=zip(*[x.split('/') for x in pos_list])[0]
+            # pos=zip(*[x.split('/') for x in pos_list])[0]
+            pos=list(zip(*[x.split('/') for x in pos_list]))[0]
             print('sentence pos:',pos)
             print('keyword,',keyword)
             if keyword!=[]:
-                keyword=list(zip(*keyword)[0])
+                keyword=list(list(zip(*keyword))[0])
                 keyword_new=[]
                 for item in keyword:
                     tem1=[line.strip().split().index(x) for x in item.split() if x in line.strip().split()]
@@ -94,6 +96,7 @@ def sigma_word(x):
         return 0
     #return max(0, 1-((x-1))**2)
     #return (((np.abs(x)+x)*0.5-0.6)/0.4)**2
+
 def sen2mat(s, id2sen, emb_word, option):
     mat=[]
     for item in s:
@@ -108,7 +111,7 @@ def sen2mat(s, id2sen, emb_word, option):
             mat.append(np.random.random([option.hidden_size]))
     return np.array(mat)
 
-def similarity(s1,s2, sta_vec, id2sen, emb_word, option):
+def similarity_keywords(s1,s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
     emb1=sen2mat(s1, id2sen, emb_word, option)
     #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
@@ -131,8 +134,33 @@ def similarity(s1,s2, sta_vec, id2sen, emb_word, option):
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
-def similarity_batch(s1, s2, sta_vec, id2sen, emb_word, option):
-    return np.array([ similarity(x,s2,sta_vec, id2sen, emb_word, option) for x in s1 ])
+def similarity_semantic(s1,s2, sta_vec, id2sen, emb_word, option, model):
+    e=1e-5
+    print(id2sen(s1))
+    emb1=sen2mat(s1, id2sen, emb_word, option)
+    #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
+    emb2=sen2mat(s2, id2sen, emb_word, option)
+    wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32)
+    #wei2=normalize(wei2)
+    
+    emb_mat=np.dot(emb2,emb1.T)
+    norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e))
+    norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e))
+    sim_mat=np.dot(norm2,emb_mat).dot(norm1)
+    sim_vec=sim_mat.max(axis=1)
+    # print('sss',sim_vec)
+    # print wei2
+    # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
+    sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
+    # sim=(sim_vec).mean()
+    return sigma_word(sim)
+
+    def similarity_batch_word(s1, s2, sta_vec, option):
+        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
+
+
+def similarity_batch(similarity,s1, s2, sta_vec, id2sen, emb_word, option, model=None):
+    return np.array([ similarity(x,s2,sta_vec, id2sen, emb_word, option, None) for x in s1 ])
 
 
 def cut_from_point(input, sequence_length, ind,option, mode=0):
@@ -411,10 +439,19 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
             pos += 1
 
-def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
-    generated_sentence = []
-    emb_word,emb_id=pkl.load(open(option.emb_path))
+def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode = 'keyword'):
     sim=option.sim
+    sim_mode = 'semantic'
+    similaritymodel = None
+    if sim_mode == 'keyword':
+        similarity = similarity_keywords
+    elif sim_mode =='semantic':
+        similaritymodel =  BertEncoding()
+        similarity = similarity_semantic
+
+    generated_sentence = []
+    fileemb = open(option.emb_path,'rb')
+    emb_word,emb_id=pkl.load(fileemb, encoding = 'latin1')
     sta_vec=list(np.zeros([option.num_steps-1]))
 
     use_data, sta_vec_list = read_data_use(option, dataclass.sen2id)
@@ -450,7 +487,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                 tem*=prob_old[j+1][option.dict_size+1]
                 prob_old_prob=tem
                 if sim!=None:
-                  similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, option)
+                  similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word,
+                          option, similaritymodel)
                   prob_old_prob*=similarity_old
                 else:
                   similarity_old=-1
@@ -475,8 +513,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
           
                 prob_candidate=np.array(prob_candidate)
                 if sim!=None:
-                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
-                            id2sen, emb_word, option)
+                    similarity_candidate=similarity_batch(similarity, input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)
                     prob_candidate=prob_candidate*similarity_candidate
                 prob_candidate_norm=normalize(prob_candidate)
                 prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
@@ -523,8 +561,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                     prob_candidate.append(tem)
                 prob_candidate=np.array(prob_candidate)
                 if sim!=None:
-                    similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
-                            id2sen, emb_word, option)
+                    similarity_candidate=similarity_batch(similarity,input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)
                     prob_candidate=prob_candidate*similarity_candidate
                 prob_candidate_norm=normalize(prob_candidate)
                 prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
@@ -539,7 +577,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                 tem = np.power(tem,(sequence_length_candidate[0]*1.0)/(sequence_length[0]))
                 prob_old_prob=tem
                 if sim!=None:
-                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, option)
+                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word,\
+                            option, similaritymodel)
                     prob_old_prob=prob_old_prob*similarity_old
                 else:
                     similarity_old=-1
@@ -573,7 +612,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                 tem*=prob_old[j+1][option.dict_size+1]
                 prob_old_prob=tem
                 if sim!=None:
-                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, option)
+                    similarity_old=similarity(input[0], input_original, sta_vec, id2sen, emb_word, \
+                            option, similaritymodel)
                     prob_old_prob=prob_old_prob*similarity_old
                 else:
                     similarity_old=-1
@@ -590,8 +630,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel):
                 tem = np.power(tem,sequence_length[0]*1.0/(sequence_length_candidate[0]))
                 prob_new_prob=tem
                 if sim!=None:
-                    similarity_new=similarity_batch(input_candidate, input_original,sta_vec,\
-                            id2sen, emb_word, option)
+                    similarity_new=similarity_batch(similarity, input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)
                     prob_new_prob=prob_new_prob*similarity_new
                 
                 sim_new = similarity_new

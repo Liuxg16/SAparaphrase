@@ -23,7 +23,7 @@ import unicodedata
 import os
 import logging
 
-from .file_utils import cached_path
+# from .file_utils import cached_path
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -114,7 +114,7 @@ class BertTokenizer(object):
             vocab_file = os.path.join(vocab_file, VOCAB_NAME)
         # redirect to the cache, if necessary
         try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
+            resolved_vocab_file = vocab_file # cached_path(vocab_file, cache_dir=cache_dir)
         except FileNotFoundError:
             logger.error(
                 "Model name '{}' was not found in model name list ({}). "

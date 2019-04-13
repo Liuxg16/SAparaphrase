@@ -4,4 +4,5 @@ from .modeling import (BertConfig, BertModel, BertForPreTraining,
                        BertForSequenceClassification, BertForTokenClassification,
                        BertForQuestionAnswering)
 from .optimization import BertAdam
-from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+# from .file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+PYTORCH_PRETRAINED_BERT_CACHE = 'xx'

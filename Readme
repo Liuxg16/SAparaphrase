@@ -1,0 +1,7 @@
+# Env
+python 3.5
+nltk
+pip3 install python-zpar
+
+# test bert
+CUDA_VISIBLE_DEVICES=1 python3 bertinterface.py
