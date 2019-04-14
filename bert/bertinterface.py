@@ -43,7 +43,6 @@ class InputExample(object):
         self.text_b = text_b
         self.label = label
 
-
 class InputFeatures(object):
     """A single set of features of data."""
 
@@ -52,7 +51,6 @@ class InputFeatures(object):
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_id = label_id
-
 
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
@@ -133,7 +131,6 @@ class SentProcessor(object):
 
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
-        logger.info("Samples: {}".format(len(lines)))
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
@@ -395,8 +392,8 @@ class BertEncoding():
     def get_encoding(self, sents, max_seq_length=15):
         label_list = self.processor.get_labels()
         eval_examples = self.processor.get_dev_examples(sents=sents)
-        for e in eval_examples:
-            print('----------------', e.text_a)
+        # for e in eval_examples:
+        #     print('----------------', e.text_a)
         eval_features = convert_examples_to_features(
             eval_examples, label_list, max_seq_length, self.tokenizer)
         input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
@@ -408,46 +405,8 @@ class BertEncoding():
         input_mask = input_mask.to(self.device)
         segment_ids = segment_ids.to(self.device)
         representation = self.model(input_ids, segment_ids, input_mask) # 1,768
-        print(torch.mean(representation,1))
 
         return representation
-
-
-
-
-def get_bert_encoding(sents, max_seq_length=15):
-    # list of sentence
-
-    device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
-    processor = SentProcessor()
-    bert_path = '/home/liuxg/.pytorch_pretrained_bert'
-    tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=True)
-
-    # Prepare model
-    model = SentenceBert.from_pretrained(bert_path)
-    model.to(device)
-    model.eval()
-    
-    # input
-    label_list = processor.get_labels()
-    eval_examples = processor.get_dev_examples(sents=sents)
-    for e in eval_examples:
-        print('----------------', e.text_a)
-    eval_features = convert_examples_to_features(
-        eval_examples, label_list, max_seq_length, tokenizer)
-    input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-    input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-    segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-    label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
-
-    input_ids = input_ids.to(device)
-    input_mask = input_mask.to(device)
-    segment_ids = segment_ids.to(device)
-    representation = model(input_ids, segment_ids, input_mask) # 1,768
-    print(torch.mean(representation,1))
-
-    return representation
-
 
 
 if __name__ == "__main__":

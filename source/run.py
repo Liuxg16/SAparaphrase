@@ -92,6 +92,8 @@ def main():
     parser.add_argument('--action_prob', default=[0.33,0.33,0.33], type=list)
     parser.add_argument('--threshold', default=0.1, type=float)
     parser.add_argument('--just_acc_rate', default=0.0, type=float)
+    parser.add_argument('--sim_mode', default='keyword', type=str)
+    parser.add_argument('--save_path', default='temp.txt', type=str)
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -155,8 +157,9 @@ def main():
                 backwardmodel.load_state_dict(torch.load(f))
         forwardmodel.eval()
         backwardmodel.eval()
-        generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel)
-        savetexts(generated_word_lists,'generated.txt')
+        generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel,\
+                sim_mode = option.sim_mode)
+        savetexts(generated_word_lists,option.save_path)
         # Evaluate model scores
         if option.reference_path is not None:
             actual_word_lists = []

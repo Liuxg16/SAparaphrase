@@ -6,6 +6,7 @@ import torch, sys,os
 import pickle as pkl
 from copy import copy
 from bert.bertinterface import BertEncoding
+from utils import get_corpus_bleu_scores
 
 def output_p(sent, model):
     # list
@@ -136,31 +137,61 @@ def similarity_keywords(s1,s2, sta_vec, id2sen, emb_word, option, model = None):
 
 def similarity_semantic(s1,s2, sta_vec, id2sen, emb_word, option, model):
     e=1e-5
-    print(id2sen(s1))
-    emb1=sen2mat(s1, id2sen, emb_word, option)
-    #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
-    emb2=sen2mat(s2, id2sen, emb_word, option)
-    wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32)
-    #wei2=normalize(wei2)
+    sourcesent = [' '.join(id2sen(s1))]
+    rep1 = model.get_encoding(sourcesent)
+    sourcesent2 = [' '.join(id2sen(s2))]
+    rep2 = model.get_encoding(sourcesent2)
+    norm1 = rep1.norm().item()
+    norm2 = rep2.norm().item()
+    semantic = torch.sum(rep1*rep2)/(rep1.norm()*rep2.norm())
+    semantic = semantic*(1- (abs(norm1-norm2)/max(norm1,norm2)))
+    return semantic.item()
+
+    def similarity_batch_word(s1, s2, sta_vec, option):
+        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
+
+def similarity_semantic_bleu(s1,s2, sta_vec, id2sen, emb_word, option, model):
+    sourcesent = [' '.join(id2sen(s1))]
+    rep1 = model.get_encoding(sourcesent)
+    sourcesent2 = [' '.join(id2sen(s2))]
+    rep2 = model.get_encoding(sourcesent2)
+    norm1 = rep1.norm().item()
+    norm2 = rep2.norm().item()
+    semantic = torch.sum(rep1*rep2)/(rep1.norm()*rep2.norm())
+    semantic = semantic*(1- (abs(norm1-norm2)/max(norm1,norm2)))
+    actual_word_lists = [[id2sen(s2)]]
+    generated_word_lists = [id2sen(s1)]
+    bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[1]
+    sim = semantic.item() * np.power((1-bleu_scores), 1.0/(len(id2sen(s1))))
+    return sim
+
+    def similarity_batch_word(s1, s2, sta_vec, option):
+        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
+
+def similarity_semantic_keywords(s1,s2, sta_vec, id2sen, emb_word, option, model):
+    C1 = 0.5
+    tem = 1
     
-    emb_mat=np.dot(emb2,emb1.T)
-    norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e))
-    norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e))
-    sim_mat=np.dot(norm2,emb_mat).dot(norm1)
-    sim_vec=sim_mat.max(axis=1)
-    # print('sss',sim_vec)
-    # print wei2
-    # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
-    sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
-    # sim=(sim_vec).mean()
-    return sigma_word(sim)
+    for i,x in zip(sta_vec,s2):
+        if i==1 and x not in s1:
+            tem *= C1
+    sourcesent = [' '.join(id2sen(s1))]
+    rep1 = model.get_encoding(sourcesent)
+    sourcesent2 = [' '.join(id2sen(s2))]
+    rep2 = model.get_encoding(sourcesent2)
+    norm1 = rep1.norm().item()
+    norm2 = rep2.norm().item()
+    semantic = torch.sum(rep1*rep2)/(rep1.norm()*rep2.norm())
+    semantic = semantic*(1- (abs(norm1-norm2)/max(norm1,norm2)))
+    sim = semantic.item()  * tem
+    return sim
 
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
 
 def similarity_batch(similarity,s1, s2, sta_vec, id2sen, emb_word, option, model=None):
-    return np.array([ similarity(x,s2,sta_vec, id2sen, emb_word, option, None) for x in s1 ])
+    return np.array([ similarity(x,s2,sta_vec, id2sen, emb_word, option, model) for x in s1 ])
 
 
 def cut_from_point(input, sequence_length, ind,option, mode=0):
@@ -441,13 +472,19 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
 def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode = 'keyword'):
     sim=option.sim
-    sim_mode = 'semantic'
     similaritymodel = None
     if sim_mode == 'keyword':
         similarity = similarity_keywords
     elif sim_mode =='semantic':
         similaritymodel =  BertEncoding()
         similarity = similarity_semantic
+    elif sim_mode =='semantic-bleu':
+        similaritymodel =  BertEncoding()
+        similarity = similarity_semantic_bleu
+    elif sim_mode =='semantic-keyword':
+        similaritymodel =  BertEncoding()
+        similarity = similarity_semantic_keywords
+
 
     generated_sentence = []
     fileemb = open(option.emb_path,'rb')
@@ -456,7 +493,7 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
 
     use_data, sta_vec_list = read_data_use(option, dataclass.sen2id)
     id2sen = dataclass.id2sen
-    C = 0.2 # 0.2
+    C = 1 # 0.2
     
     for sen_id in range(use_data.length):
         #generate for each sentence
@@ -475,9 +512,11 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
 
         for iter in range(option.sample_time):
             #ind is the index of the selected word, regardless of the beginning token.
+            print(iter)
             ind=pos%(sequence_length[0]-1)
             action=choose_action(option.action_prob)
-            temperature = C/(math.log(iter+2))
+            steps = float(iter/(sequence_length[0]-1))
+            temperature = C/(math.log(steps+2))
 
             if action==0: # word replacement (action: 0)
                 prob_old= output_p(input, forwardmodel) #15,K
@@ -525,14 +564,15 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
                 V_new = math.log(prob_candidate_prob+1e-20)
                 V_old = math.log(prob_old_prob+1e-20)
                 alphat = min(1,math.exp((V_new-V_old)/temperature))
-                if sim_new < sim_old:
-                    alphat=0
+                # if sim_new < sim_old:
+                #     alphat=0
                 if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
                     input1=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                     if np.sum(input1[0])==np.sum(input[0]):
                         pass
                     else:
                         input= input1
+                        print('vold, vnew,simold, simnew',V_old, V_new,sim_old, sim_new)
                         print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
 
             elif action==1: # word insert
@@ -589,14 +629,15 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
                 V_new = math.log(prob_candidate_prob+1e-50)
                 V_old = math.log(prob_old_prob+1e-50)
                 alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
-                if sim_new<sim_old:
-                    alphat = 0
+                # if sim_new<sim_old:
+                #     alphat = 0
                 if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size and (prob_candidate_prob>prob_old_prob* option.threshold):
                     input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                     sequence_length+=1
                     pos+=1
                     sta_vec.insert(ind, 0.0)
                     del(sta_vec[-1])
+                    print('vold, vnew,simold, simnew',V_old, V_new,sim_old, sim_new)
                     print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
  
 
@@ -627,6 +668,7 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
                 for j in range(sequence_length_candidate[0]-1):
                     tem*=prob_new[j][input_candidate[0][j+1]]
                 tem*=prob_new[j+1][option.dict_size+1]
+
                 tem = np.power(tem,sequence_length[0]*1.0/(sequence_length_candidate[0]))
                 prob_new_prob=tem
                 if sim!=None:
@@ -634,14 +676,12 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
                             id2sen, emb_word, option, similaritymodel)
                     prob_new_prob=prob_new_prob*similarity_new
                 
-                sim_new = similarity_new
+                sim_new = similarity_new[0]
                 sim_old =similarity_old
                 V_new = math.log(prob_new_prob+1e-20)
                 V_old = math.log(prob_old_prob+1e-20)
+                
                 alphat = min(1,math.exp((V_new-V_old)/temperature))
-            
-                if sim_new<sim_old:
-                    alphat = 0
                       
                 if choose_action([alphat, 1-alphat])==0:
                     input=np.concatenate([input[:,:ind+1], input[:,ind+2:], input[:,:1]*0+option.dict_size+1], axis=1)
@@ -650,9 +690,8 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
                     del(sta_vec[ind])
                     sta_vec.append(0)
                     
+                    print('vold, vnew,simold, simnew',V_old, V_new,sim_old, sim_new)
                     print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
-
-
 
             pos += 1
         generated_sentence.append(id2sen(input[0]))
