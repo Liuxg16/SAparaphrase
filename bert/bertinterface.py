@@ -406,7 +406,7 @@ class BertEncoding():
         segment_ids = segment_ids.to(self.device)
         representation = self.model(input_ids, segment_ids, input_mask) # 1,768
 
-        return representation
+        return representation.detach()
 
 
 if __name__ == "__main__":

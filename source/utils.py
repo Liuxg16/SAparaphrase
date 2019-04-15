@@ -16,7 +16,6 @@ bleu_score_weights = {
 
 def get_corpus_bleu_scores(actual_word_lists, generated_word_lists):
     bleu_scores = dict()
-
     for i in range(len(bleu_score_weights)):
         bleu_scores[i + 1] = round(
             corpus_bleu(

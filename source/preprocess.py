@@ -15,7 +15,7 @@ with open(file_name) as f:
         ques1 = utils.clarify(row[3])
         ques2 = utils.clarify(row[4])
 
-        if row[5]== '1' and testnum<10000:
+        if row[5]== '1' and testnum<10000 and len(ques1.split())<14:
             test_object.write(ques1)
             test_object.write('\n')
             refer_object.write(ques2)

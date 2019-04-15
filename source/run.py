@@ -89,7 +89,7 @@ def main():
     parser.add_argument('--rare_since', default=300000, type=int)
     parser.add_argument('--sample_time', default=100, type=int)
     parser.add_argument('--search_size', default=100, type=int)
-    parser.add_argument('--action_prob', default=[0.33,0.33,0.33], type=list)
+    parser.add_argument('--action_prob', default=[0.4,0.3,0.3], type=list)
     parser.add_argument('--threshold', default=0.1, type=float)
     parser.add_argument('--just_acc_rate', default=0.0, type=float)
     parser.add_argument('--sim_mode', default='keyword', type=str)
