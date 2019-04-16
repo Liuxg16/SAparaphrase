@@ -141,6 +141,55 @@ class SentProcessor(object):
                 InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
+class PairProcessor(object):
+    def __init__(self):
+        pass
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, sents1, sents2):
+        # sents: list of sentence
+        """See base class."""
+        return self._create_examples(sents1, sents2, "dev")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines1, lines2, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines1):
+            guid = "%s-%s" % (set_type, i)
+            text_a = line
+            text_b = lines2[i]
+            label = '1'
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
+
+def _truncate_seq_pair(tokens_a, tokens_b, max_length):
+    """Truncates a sequence pair in place to the maximum length."""
+
+    # This is a simple heuristic which will always truncate the longer sequence
+    # one token at a time. This makes more sense than truncating an equal percent
+    # of tokens from each, since if one sequence is very short then each token
+    # that's truncated likely contains more information than a longer sequence.
+    while True:
+        total_length = len(tokens_a) + len(tokens_b)
+        if total_length <= max_length:
+            break
+        if len(tokens_a) > len(tokens_b):
+            tokens_a.pop()
+        else:
+            tokens_b.pop()
+
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
 
@@ -409,8 +458,44 @@ class BertEncoding():
         return representation.detach()
 
 
+class BertSimilarity():
+
+    def __init__(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
+        self.processor = PairProcessor()
+        bert_path = '/home/liuxg/.pytorch_pretrained_bert'
+        self.tokenizer = BertTokenizer.from_pretrained(bert_path, do_lower_case=True)
+
+        # Prepare model
+        self.model = SentenceBert.from_pretrained(bert_path)
+        self.model.to(self.device)
+        self.model.eval()
+
+    def get_encoding(self, sents1, sents2, max_seq_length=33):
+        label_list = self.processor.get_labels()
+        eval_examples = self.processor.get_dev_examples(sents1=sents1, sents2 = sents2)
+        # for e in eval_examples:
+        #     print('----------------', e.text_a)
+        eval_features = convert_examples_to_features(
+            eval_examples, label_list, max_seq_length, self.tokenizer)
+        input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+
+        input_ids = input_ids.to(self.device)
+        input_mask = input_mask.to(self.device)
+        segment_ids = segment_ids.to(self.device)
+        representation = self.model(input_ids, segment_ids, input_mask) # 1,768
+
+        return representation.detach()
+
+
 if __name__ == "__main__":
 
     sents = ['who343 do3+.. you 看like?','who do you like', 'who do you like most']
-    bertencoding = BertEncoding()
-    bertencoding.get_encoding(sents)
+    sents1 = ['what do you believe','why are you so pretty']
+    sents2 = ['which computer do you like', 'what app are you most using']
+    bertencoding = BertSimilarity()
+    rep = bertencoding.get_encoding(sents1,sents2)
+    print(rep.size())

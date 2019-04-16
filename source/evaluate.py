@@ -1,7 +1,7 @@
 import argparse, sys, torch
 sys.path.append('/home/liuxg/workspace/SAparaphrase/')
 sys.path.append('/home/liuxg/workspace/SAparaphrase/bert')
-from bert.bertinterface import BertEncoding
+from bert.bertinterface import BertEncoding, BertSimilarity
 from utils import get_corpus_bleu_scores, savetexts
 
 class Option(object):
@@ -38,12 +38,12 @@ def evaluate_bleu(reference_path, generated_path):
     actual_word_lists = []
     with open(reference_path) as f:
         for line in f:
-            actual_word_lists.append([line.strip().split()])
+            actual_word_lists.append([line.strip().lower().split()])
 
     generated_word_lists = []
     with open(generated_path) as f:
         for line in f:
-            generated_word_lists.append(line.strip().split())
+            generated_word_lists.append(line.strip().lower().split())
 
     bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
     print('bleu scores:', bleu_scores)
@@ -78,21 +78,26 @@ def evaluate_semantic(reference_path, generated_path):
 
 
 def test_semantic(s1, s2):
-    model =  BertEncoding()
-    rep1 = model.get_encoding(s1)
-    rep2 = model.get_encoding(s2)
-    summation = torch.sum(rep1*rep2,1)/(rep1.norm()*rep2.norm())
-    print(torch.mean(summation))
+    model =  BertSimilarity()
+    rep1 = model.get_encoding(s1,s1)
+    rep2 = model.get_encoding(s1,s2)
+    rep3 = model.get_encoding(s2,s2)
+    rep1 = (rep1+rep3)/2
+    semantic = torch.sum(rep1*rep2,1)/(rep1.norm()*rep2.norm())
+    semantic = semantic*(1- (abs(rep1.norm()-rep2.norm())/max(rep1.norm(),rep2.norm())))
+    print(torch.mean(semantic))
 
 
 
 if __name__ == "__main__":
-    # main()
+    main()
     s1 = ['do you like the red car']
-    s2 = ['is the red car is your favorite']
-    s3 = ['i will go to work on monday afternoon']
-    s4 = ['is the blue plane is your favorite']
-    test_semantic(s1,s2)
-    test_semantic(s4,s2)
-    test_semantic(s1,s3)
+    s2 = ['is the red car  your favorite']
+    s3 = ['how should i prepare for lunch']
+    s4 = ['how should you prepare for gpa ']
+    s5 = ['how should you make for lunch']
+    # test_semantic(s1,s2)
+    # test_semantic(s4,s2)
+    # test_semantic(s4,s3)
+    # test_semantic(s5,s3)
 

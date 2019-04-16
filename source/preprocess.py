@@ -1,5 +1,6 @@
 import csv 
 import utils
+import random
 file_name = 'data/quora/train.csv'
 trainpath = 'data/train.txt'
 testpath = 'data/test.txt'
@@ -15,7 +16,7 @@ with open(file_name) as f:
         ques1 = utils.clarify(row[3])
         ques2 = utils.clarify(row[4])
 
-        if row[5]== '1' and testnum<10000 and len(ques1.split())<14:
+        if row[5]== '1' and testnum<30000 and len(ques1.split())<14 and random.random()>0.5:
             test_object.write(ques1)
             test_object.write('\n')
             refer_object.write(ques2)
@@ -29,16 +30,16 @@ with open(file_name) as f:
 test_object.close( )
 refer_object.close( )
 
-file_name = 'data/quora/test.csv'
-with open(file_name) as f:
-    csv_reader = csv.reader(f, delimiter=',')
-    for row in csv_reader:
-        ques1 = utils.clarify(row[3])
-        ques2 = utils.clarify(row[4])
-
-        train_object.write(ques1)
-        train_object.write('\n')
-        train_object.write(ques2)
-        train_object.write('\n')
-
+# file_name = 'data/quora/test.csv'
+# with open(file_name) as f:
+#     csv_reader = csv.reader(f, delimiter=',')
+#     for row in csv_reader:
+#         ques1 = utils.clarify(row[3])
+#         ques2 = utils.clarify(row[4])
+# 
+#         train_object.write(ques1)
+#         train_object.write('\n')
+#         train_object.write(ques2)
+#         train_object.write('\n')
+# 
 train_object.close( )

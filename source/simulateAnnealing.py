@@ -5,7 +5,7 @@ from data import array_data
 import torch, sys,os
 import pickle as pkl
 from copy import copy
-from bert.bertinterface import BertEncoding
+from bert.bertinterface import BertEncoding, BertSimilarity
 from utils import get_corpus_bleu_scores
 
 def output_p(sent, model):
@@ -130,7 +130,7 @@ def similarity_semantic_bleu(s1,s2, sta_vec, id2sen, emb_word, option, model):
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
-def similarity_semantic(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
+def similarity_semantic1(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
     K = 4
     sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
     rep1 = model.get_encoding(sourcesent)
@@ -147,6 +147,25 @@ def similarity_semantic(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
     res = np.array(semantics)
     res = np.power(semantics,K)
     return res
+
+
+def similarity_semantic(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
+    K = 4
+    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
+    sourcesent2 = [' '.join(id2sen(s2))] * len(s1_list)
+    rep1 = model.get_encoding(sourcesent, sourcesent)
+    rep2 = model.get_encoding(sourcesent,sourcesent2)
+    rep3 = model.get_encoding(sourcesent2,sourcesent2)
+    rep1 = (rep1+rep3)/2
+    norm1 = rep1.norm(2,1)
+    norm2 = rep2.norm(2,1)
+    semantic = torch.sum(rep1*rep2,1)/(norm1*norm2)
+    semantic = semantic*(1- (torch.abs(norm1-norm2)/torch.max(norm1,norm2)))
+    semantics = semantic.cpu().numpy()
+    res = np.power(semantics,K)
+    return res
+
+
 
 def similarity_semantic_keyword(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
     C1 = 0.5
@@ -483,7 +502,7 @@ def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode 
     if sim_mode == 'keyword':
         similarity = similarity_keyword
     elif sim_mode =='semantic':
-        similaritymodel =  BertEncoding()
+        similaritymodel =  BertSimilarity()
         similarity = similarity_semantic
     elif sim_mode =='semantic-bleu':
         similaritymodel =  BertEncoding()
