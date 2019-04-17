@@ -94,6 +94,7 @@ def main():
     parser.add_argument('--just_acc_rate', default=0.0, type=float)
     parser.add_argument('--sim_mode', default='keyword', type=str)
     parser.add_argument('--save_path', default='temp.txt', type=str)
+    parser.add_argument('--tf_path', default='data/tfmodel/', type=str)
     
     d = vars(parser.parse_args())
     option = Option(d)
