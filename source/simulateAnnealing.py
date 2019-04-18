@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
-import RAKE, math
+import RAKE, math, random
 from zpar import ZPar
 from data import array_data
 import torch, sys,os
@@ -188,17 +188,17 @@ def similarity_keyword(s1_list, s2, sta_vec, id2sen, emb_word, option, model = N
     e=1e-5
     sims=  []
     for s1 in s1_list:
-        emb1=sen2mat(s1, id2sen, emb_word, option)
+        emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
         #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
-        emb2=sen2mat(s2, id2sen, emb_word, option)
-        wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32)
+        emb2=sen2mat(s2, id2sen, emb_word, option) # N*k
+        wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32) # N*1
         #wei2=normalize(wei2)
         
-        emb_mat=np.dot(emb2,emb1.T)
-        norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e))
-        norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e))
-        sim_mat=np.dot(norm2,emb_mat).dot(norm1)
-        sim_vec=sim_mat.max(axis=1)
+        emb_mat=np.dot(emb2,emb1.T) #N*M
+        norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e)) # M*M
+        norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e)) #N*N
+        sim_mat=np.dot(norm2,emb_mat).dot(norm1) #N*M
+        sim_vec=sim_mat.max(axis=1) #N
         # print('sss',sim_vec)
         # print wei2
         # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
@@ -284,84 +284,125 @@ class StrToBytes:
     def readline(self, size=-1):
         return self.fileobj.readline(size).encode()
 
+def data_type():
+  return tf.float32
+
 class PTBModel(object):
   #The language model.
 
-  def __init__(self, is_training, is_test_LM=False):
-    self._is_training = is_training
-    self.batch_size = option.batch_size
-    self.num_steps = option.num_steps
-    size = option.hidden_size
-    vocab_size = option.vocab_size
-    self._input=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
-    self._target=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
-    self._sequence_length=tf.placeholder(shape=[None], dtype=tf.int32)
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable("embedding", [vocab_size, size], dtype=data_type())
-      inputs = tf.nn.embedding_lookup(embedding, self._input)
-    softmax_w = tf.get_variable(
-          "softmax_w", [size, vocab_size], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
-    output = self._build_rnn_graph(inputs, self._sequence_length, is_training)
+    def __init__(self, is_training,option, is_test_LM=False):
+        self.option = option
+        self._is_training = is_training
+        self.num_layers  =2
+        self.num_steps = option.num_steps
+        size = 300 #option.hidden_size
+        self.hidden_size = size
+        vocab_size = option.vocab_size
+        self._input=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
+        self._target=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
+        self._sequence_length=tf.placeholder(shape=[None], dtype=tf.int32)
+        with tf.device("/cpu:0"):
+          embedding = tf.get_variable("embedding", [vocab_size, size], dtype=data_type())
+          inputs = tf.nn.embedding_lookup(embedding, self._input)
+        softmax_w = tf.get_variable(
+              "softmax_w", [size, vocab_size], dtype=data_type())
+        softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+        output = self._build_rnn_graph(inputs, self._sequence_length, is_training)
 
-    output=tf.reshape(output, [-1, option.hidden_size])
-    logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
-      # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [-1, self.num_steps, vocab_size])
-    self._output_prob=tf.nn.softmax(logits)
-      # Use the contrib sequence loss and average over the batches
-    mask=tf.sequence_mask(lengths=self._sequence_length, maxlen=self.num_steps, dtype=data_type())
-    loss = tf.contrib.seq2seq.sequence_loss(
-      logits,
-      self._target,
-      mask, 
-      average_across_timesteps=True,
-      average_across_batch=True)
+        output=tf.reshape(output, [-1, self.hidden_size])
+        logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+          # Reshape logits to be a 3-D tensor for sequence loss
+        logits = tf.reshape(logits, [-1, self.num_steps, vocab_size])
+        self._output_prob=tf.nn.softmax(logits)
+          # Use the contrib sequence loss and average over the batches
+        mask=tf.sequence_mask(lengths=self._sequence_length, maxlen=self.num_steps, dtype=data_type())
+        loss = tf.contrib.seq2seq.sequence_loss(
+          logits,
+          self._target,
+          mask, 
+          average_across_timesteps=True,
+          average_across_batch=True)
 
-    # Update the cost
-    self._cost = loss
+        # Update the cost
+        self._cost = loss
 
+        #self._lr = tf.Variable(0.0, trainable=False)
+        tvars = tf.trainable_variables()
 
-    #self._lr = tf.Variable(0.0, trainable=False)
-    tvars = tf.trainable_variables()
+    def _build_rnn_graph(self, inputs, sequence_length, is_training):
+        return self._build_rnn_graph_lstm(inputs, sequence_length, is_training)
 
-  def _build_rnn_graph(self, inputs, sequence_length, is_training):
-    return self._build_rnn_graph_lstm(inputs, sequence_length, is_training)
-
-  def _get_lstm_cell(self, is_training):
-    return tf.contrib.rnn.BasicLSTMCell(
-          config.hidden_size, forget_bias=0.0, state_is_tuple=True,
+    def _get_lstm_cell(self, is_training):
+        return tf.contrib.rnn.BasicLSTMCell(
+          self.hidden_size, forget_bias=0.0, state_is_tuple=True,
           reuse=not is_training)
 
-  def _build_rnn_graph_lstm(self, inputs, sequence_length, is_training):
-    """Build the inference graph using canonical LSTM cells."""
-    # Slightly better results can be obtained with forget gate biases
-    # initialized to 1 but the hyperparameters of the model would need to be
-    # different than reported in the paper.
-    def make_cell():
-      cell = self._get_lstm_cell( is_training)
-      if is_training and config.keep_prob < 1:
-        cell = tf.contrib.rnn.DropoutWrapper(
-            cell, output_keep_prob=config.keep_prob)
-      return cell
+    def _build_rnn_graph_lstm(self, inputs, sequence_length, is_training):
+        """Build the inference graph using canonical LSTM cells."""
+        # Slightly better results can be obtained with forget gate biases
+        # initialized to 1 but the hyperparameters of the model would need to be
+        # different than reported in the paper.
+        def make_cell():
+          cell = self._get_lstm_cell( is_training)
+          if is_training:
+            cell = tf.contrib.rnn.DropoutWrapper(
+                cell, output_keep_prob=0.1)
+          return cell
 
-    cell = tf.contrib.rnn.MultiRNNCell(
-        [make_cell() for _ in range(config.num_layers)], state_is_tuple=True)
-    outputs, states=tf.nn.dynamic_rnn(cell=cell, inputs=inputs, sequence_length=sequence_length, dtype=data_type())
+        cell = tf.contrib.rnn.MultiRNNCell(
+            [make_cell() for _ in range(self.num_layers)], state_is_tuple=True)
+        outputs, states=tf.nn.dynamic_rnn(cell=cell, inputs=inputs, sequence_length=sequence_length, dtype=data_type())
 
-    return outputs
-  
-    
-init = tf.global_variables_initializer()
-with tf.Session() as session:
-    session.run(init)
+        return outputs
+
+
+def run_epoch(sess, model, input, sequence_length, target=None, mode='train'):
+    #Runs the model on the given data.
+    if mode=='train':
+        #train language model
+        _,cost = sess.run([model._train_op, model._cost], feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
+        return cost
+    elif mode=='test':
+        #test language model
+        cost = sess.run(model._cost, feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
+        return cost
+    else:
+        #use the language model to calculate sentence probability
+        output_prob = sess.run(model._output_prob, feed_dict={model._input: input, model._sequence_length:sequence_length})
+        return output_prob
 
 
 def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
-
+    tfflag = True
     if tfflag:
-      saver_forward.restore(session, config.forward_save_path)
-      saver_backward.restore(session, config.backward_save_path)
+        with tf.name_scope("forward_train"):
+            with tf.variable_scope("forward", reuse=None):
+                m_forward = PTBModel(is_training=True,option=option)
+        with tf.name_scope("forward_test"):
+            with tf.variable_scope("forward", reuse=True):
+                mtest_forward = PTBModel(is_training=False,option=option)
+        var=tf.trainable_variables()
+        var_forward=[x for x in var if x.name.startswith('forward')]
+        saver_forward=tf.train.Saver(var_forward, max_to_keep=1)
+
+        with tf.name_scope("backward_train"):
+            with tf.variable_scope("backward", reuse=None):
+                m_backward = PTBModel(is_training=True,option=option)
+
+        with tf.name_scope("backward_test"):
+            with tf.variable_scope("backward", reuse=True):
+                mtest_backward = PTBModel(is_training=False, option=option)
+        var=tf.trainable_variables()
+        var_backward=[x for x in var if x.name.startswith('backward')]
+        saver_backward=tf.train.Saver(var_backward, max_to_keep=1)
+
+        init = tf.global_variables_initializer()
+        session = tf.Session()
+        session.run(init)
+
+        saver_forward.restore(session, option.forward_save_path)
+        saver_backward.restore(session, option.backward_save_path)
+
 
     similaritymodel =  BertSimilarity()
     similarity = similarity_keyword #similarity_semantic
@@ -374,6 +415,7 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
     use_data, sta_vec_list = read_data_use(option, dataclass.sen2id)
     id2sen = dataclass.id2sen
+    generateset = []
     
     for sen_id in range(use_data.length):
         #generate for each sentence
@@ -391,9 +433,12 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
             #ind is the index of the selected word, regardless of the beginning token.
             ind=pos%(sequence_length[0]-1)
             action=choose_action(option.action_prob)
-
             if action==0: # word replacement (action: 0)
-                prob_old= output_p(input, forwardmodel) #15,K
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                            mode='use')[0]
+                else:
+                    prob_old= output_p(input, forwardmodel) #15,K
                 tem=1
                 for j in range(sequence_length[0]-1):
                     tem*=prob_old[j][input[0][j+1]]
@@ -408,14 +453,23 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
                 input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
                         cut_from_point(input, sequence_length, ind, option, mode=action)
-                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
-                prob_backward = output_p(input_backward,backwardmodel)[
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
                         sequence_length[0]-1-ind%(sequence_length[0]-1),:]
                 prob_mul=(prob_forward*prob_backward)
 
                 input_candidate, sequence_length_candidate=generate_candidate_input(input,\
                         sequence_length, ind, prob_mul, option.search_size, option, mode=action)
-                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
                 prob_candidate=[]
                 for i in range(option.search_size):
                   tem=1
@@ -449,16 +503,25 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
 
                 input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
                         cut_from_point(input, sequence_length, ind, option, mode=action)
-                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
-                prob_backward = output_p(input_backward,backwardmodel)[
+
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
                         sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+
                 prob_mul=(prob_forward*prob_backward)
 
                 input_candidate, sequence_length_candidate=generate_candidate_input(input,\
                         sequence_length, ind, prob_mul, option.search_size, option, mode=action)
 
-                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
-
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
                 prob_candidate=[]
                 for i in range(option.search_size):
                     tem=1
@@ -475,7 +538,11 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                 prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
                 prob_candidate_prob=prob_candidate[prob_candidate_ind]
 
-                prob_old = output_p(input, forwardmodel) # 100,15,300003
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input,\
+                            sequence_length,mode='use')[0]
+                else:
+                    prob_old = output_p(input, forwardmodel) # 100,15,300003
 
                 tem=1
                 for j in range(sequence_length[0]-1):
@@ -483,9 +550,8 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                 tem*=prob_old[j+1][option.dict_size+1]
                 prob_old_prob=tem
                 if sim!=None:
-                    similarity_candidate=similarity(input, input_original,sta_vec,\
+                    similarity_old=similarity(input, input_original,sta_vec,\
                             id2sen, emb_word, option, similaritymodel)[0]
-
                     prob_old_prob=prob_old_prob*similarity_old
                 else:
                     similarity_old=-1
@@ -506,15 +572,18 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                 if sequence_length[0]<=2:
                     pos += 1
                     break
-
-                prob_old = output_p(input, forwardmodel)
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                            mode='use')[0]
+                else:
+                    prob_old= output_p(input, forwardmodel) #15,K
                 tem=1
                 for j in range(sequence_length[0]-1):
                     tem*=prob_old[j][input[0][j+1]]
                 tem*=prob_old[j+1][option.dict_size+1]
                 prob_old_prob=tem
                 if sim!=None:
-                    similarity_candidate=similarity(input, input_original,sta_vec,\
+                    similarity_old=similarity(input, input_original,sta_vec,\
                             id2sen, emb_word, option, similaritymodel)[0]
                     prob_old_prob=prob_old_prob*similarity_old
                 else:
@@ -524,14 +593,19 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                         sequence_length, ind, None, option.search_size, option, mode=action)
 
                 # delete sentence
-                prob_new = output_p(input_candidate, forwardmodel)
+                if tfflag:
+                    prob_new=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')[0]
+                else:
+                    prob_new = output_p(input_candidate, forwardmodel)
+
+
                 tem=1
                 for j in range(sequence_length_candidate[0]-1):
                     tem*=prob_new[j][input_candidate[0][j+1]]
                 tem*=prob_new[j+1][option.dict_size+1]
                 prob_new_prob=tem
                 if sim!=None:
-
                     similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
                             id2sen, emb_word, option, similaritymodel)[0]
                     prob_new_prob=prob_new_prob*similarity_candidate
@@ -539,14 +613,24 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                 # original sentence
                 input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
                         cut_from_point(input, sequence_length, ind, option, mode=0)
-                prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
-                prob_backward = output_p(input_backward,backwardmodel)[
+
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
                         sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+
                 prob_mul=(prob_forward*prob_backward)
 
                 input_candidate, sequence_length_candidate=generate_candidate_input(input,\
                         sequence_length, ind, prob_mul, option.search_size, option, mode=0)
-                prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
 
                 prob_candidate=[]
                 for i in range(option.search_size):
@@ -558,7 +642,6 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                 prob_candidate=np.array(prob_candidate)
             
                 if sim!=None:
-
                     similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
                             id2sen, emb_word, option, similaritymodel)[0]
                     prob_candidate=prob_candidate*similarity_candidate
@@ -584,8 +667,309 @@ def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
                     print(' '.join(id2sen(input[0])))
 
             pos += 1
+        generateset.append(id2sen(input[0]))
+    return generateset
 
-def  simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode = 'keyword'):
+def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
+    tfflag = True
+    if tfflag:
+        with tf.name_scope("forward_train"):
+            with tf.variable_scope("forward", reuse=None):
+                m_forward = PTBModel(is_training=True,option=option)
+        with tf.name_scope("forward_test"):
+            with tf.variable_scope("forward", reuse=True):
+                mtest_forward = PTBModel(is_training=False,option=option)
+        var=tf.trainable_variables()
+        var_forward=[x for x in var if x.name.startswith('forward')]
+        saver_forward=tf.train.Saver(var_forward, max_to_keep=1)
+
+        with tf.name_scope("backward_train"):
+            with tf.variable_scope("backward", reuse=None):
+                m_backward = PTBModel(is_training=True,option=option)
+
+        with tf.name_scope("backward_test"):
+            with tf.variable_scope("backward", reuse=True):
+                mtest_backward = PTBModel(is_training=False, option=option)
+        var=tf.trainable_variables()
+        var_backward=[x for x in var if x.name.startswith('backward')]
+        saver_backward=tf.train.Saver(var_backward, max_to_keep=1)
+
+        init = tf.global_variables_initializer()
+        session = tf.Session()
+        session.run(init)
+
+        saver_forward.restore(session, option.forward_save_path)
+        saver_backward.restore(session, option.backward_save_path)
+
+
+    similaritymodel =  BertSimilarity()
+    similarity = similarity_keyword #similarity_semantic
+
+    fileobj = open(option.emb_path,'r')
+    emb_word,emb_id=pkl.load(StrToBytes(fileobj), encoding='latin1')
+    fileobj.close()
+    sim=option.sim
+    sta_vec=list(np.zeros([option.num_steps-1]))
+
+    use_data, sta_vec_list = read_data_use(option, dataclass.sen2id)
+    id2sen = dataclass.id2sen
+    generateset = []
+    
+    for sen_id in range(use_data.length):
+        #generate for each sentence
+        sta_vec=sta_vec_list[sen_id%len(sta_vec)]
+        input, sequence_length, _=use_data(1, sen_id)
+        input_original=input[0]
+        for i in range(1,option.num_steps):
+          if input[0][i]>option.rare_since and  input[0][i]<option.dict_size:
+            sta_vec[i-1]=1
+        pos=0
+        print(' '.join(id2sen(input[0])))
+        print(sta_vec)
+
+        for iter in range(option.sample_time):
+            #ind is the index of the selected word, regardless of the beginning token.
+            ind=pos%(sequence_length[0]-1)
+            action=choose_action(option.action_prob)
+            if action==0: # word replacement (action: 0)
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                            mode='use')[0]
+                else:
+                    prob_old= output_p(input, forwardmodel) #15,K
+                tem=1
+                for j in range(sequence_length[0]-1):
+                    tem*=prob_old[j][input[0][j+1]]
+                tem*=prob_old[j+1][option.dict_size+1]
+                prob_old_prob=tem
+                if sim!=None:
+                    similarity_old=similarity(input, input_original, sta_vec, id2sen, emb_word,
+                          option, similaritymodel)[0]
+                    prob_old_prob*=similarity_old
+                else:
+                    similarity_old=-1
+
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=action)
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=action)
+
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+                prob_candidate=[]
+                for i in range(option.search_size):
+                  tem=1
+                  for j in range(sequence_length[0]-1):
+                    tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                  tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                  prob_candidate.append(tem)
+          
+                prob_candidate=np.array(prob_candidate)
+                if sim!=None:
+                    similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)
+
+                    prob_candidate=prob_candidate*similarity_candidate
+                prob_candidate_norm=normalize(prob_candidate)
+                prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+                prob_candidate_prob=prob_candidate[prob_candidate_ind]
+                if input_candidate[prob_candidate_ind][ind+1]<option.dict_size and\
+                        (prob_candidate_prob>prob_old_prob*option.threshold or just_acc(option)==0):
+                    input1=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                    if np.sum(input1[0])==np.sum(input[0]):
+                        pass
+                    else:
+                        input= input1
+                        print(' '.join(id2sen(input[0])))
+
+            elif action==1: # word insert
+                if sequence_length[0]>=option.num_steps:
+                    pos += 1
+                    break
+
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=action)
+
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=action)
+
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+                prob_candidate=[]
+                for i in range(option.search_size):
+                    tem=1
+                    for j in range(sequence_length_candidate[0]-1):
+                        tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                    tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                    prob_candidate.append(tem)
+                prob_candidate=np.array(prob_candidate)
+                if sim!=None:
+                    similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)
+                    prob_candidate=prob_candidate*similarity_candidate
+                prob_candidate_norm=normalize(prob_candidate)
+                prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+                prob_candidate_prob=prob_candidate[prob_candidate_ind]
+
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input,\
+                            sequence_length,mode='use')[0]
+                else:
+                    prob_old = output_p(input, forwardmodel) # 100,15,300003
+
+                tem=1
+                for j in range(sequence_length[0]-1):
+                    tem*=prob_old[j][input[0][j+1]]
+                tem*=prob_old[j+1][option.dict_size+1]
+                prob_old_prob=tem
+                if sim!=None:
+                    similarity_old=similarity(input, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)[0]
+                    prob_old_prob=prob_old_prob*similarity_old
+                else:
+                    similarity_old=-1
+                #alpha is acceptance ratio of current proposal
+                alpha=min(1, prob_candidate_prob*option.action_prob[2]/(prob_old_prob*option.action_prob[1]*prob_candidate_norm[prob_candidate_ind]))
+            
+                if choose_action([alpha, 1-alpha])==0 and \
+                        input_candidate[prob_candidate_ind][ind]<option.dict_size and \
+                        (prob_candidate_prob>prob_old_prob* option.threshold or just_acc(option)==0):
+                    input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                    sequence_length+=1
+                    pos+=1
+                    sta_vec.insert(ind, 0.0)
+                    del(sta_vec[-1])
+                    print(' '.join(id2sen(input[0]))) 
+
+            elif action==2: # word delete
+                if sequence_length[0]<=2:
+                    pos += 1
+                    break
+                if tfflag:
+                    prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                            mode='use')[0]
+                else:
+                    prob_old= output_p(input, forwardmodel) #15,K
+                tem=1
+                for j in range(sequence_length[0]-1):
+                    tem*=prob_old[j][input[0][j+1]]
+                tem*=prob_old[j+1][option.dict_size+1]
+                prob_old_prob=tem
+                if sim!=None:
+                    similarity_old=similarity(input, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)[0]
+                    prob_old_prob=prob_old_prob*similarity_old
+                else:
+                    similarity_old=-1
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, None, option.search_size, option, mode=action)
+
+                # delete sentence
+                if tfflag:
+                    prob_new=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')[0]
+                else:
+                    prob_new = output_p(input_candidate, forwardmodel)
+
+
+                tem=1
+                for j in range(sequence_length_candidate[0]-1):
+                    tem*=prob_new[j][input_candidate[0][j+1]]
+                tem*=prob_new[j+1][option.dict_size+1]
+                prob_new_prob=tem
+                if sim!=None:
+                    similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)[0]
+                    prob_new_prob=prob_new_prob*similarity_candidate
+                
+                # original sentence
+                input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                        cut_from_point(input, sequence_length, ind, option, mode=0)
+
+                if tfflag:
+                    prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+                    prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+                else:
+                    prob_forward = output_p(input_forward, forwardmodel)[ind%(sequence_length[0]-1),:]
+                    prob_backward = output_p(input_backward,backwardmodel)[
+                        sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+
+                prob_mul=(prob_forward*prob_backward)
+
+                input_candidate, sequence_length_candidate=generate_candidate_input(input,\
+                        sequence_length, ind, prob_mul, option.search_size, option, mode=0)
+                if tfflag:
+                    prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                            sequence_length_candidate,mode='use')
+                else:
+                    prob_candidate_pre = output_p(input_candidate, forwardmodel) # 100,15,300003
+
+                prob_candidate=[]
+                for i in range(option.search_size):
+                    tem=1
+                    for j in range(sequence_length[0]-1):
+                        tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                    tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                    prob_candidate.append(tem)
+                prob_candidate=np.array(prob_candidate)
+            
+                if sim!=None:
+                    similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                            id2sen, emb_word, option, similaritymodel)[0]
+                    prob_candidate=prob_candidate*similarity_candidate
+            
+                prob_candidate_norm=normalize(prob_candidate)
+                #alpha is acceptance ratio of current proposal
+                if input[0] in input_candidate:
+                    for candidate_ind in range(len(input_candidate)):
+                        if input[0] in input_candidate[candidate_ind: candidate_ind+1]:
+                            break
+                        pass
+                    alpha=min(prob_candidate_norm[candidate_ind]*prob_new_prob*option.action_prob[1]/(option.action_prob[2]*prob_old_prob), 1)
+                else:
+                    alpha=0
+             
+                if choose_action([alpha, 1-alpha])==0 and (prob_new_prob> prob_old_prob*option.threshold or just_acc(option)==0):
+                    input=np.concatenate([input[:,:ind+1], input[:,ind+2:], input[:,:1]*0+option.dict_size+1], axis=1)
+                    sequence_length-=1
+                    del(sta_vec[ind])
+                    sta_vec.append(0)
+
+                    pos -= 1
+                    print(' '.join(id2sen(input[0])))
+
+            pos += 1
+        generateset.append(id2sen(input[0]))
+    return generateset
+
+
+def  simulatedAnnealing_pytorch(option, dataclass,forwardmodel, backwardmodel, sim_mode = 'keyword'):
     sim=option.sim
     similaritymodel = None
     if sim_mode == 'keyword':

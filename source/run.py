@@ -89,12 +89,13 @@ def main():
     parser.add_argument('--rare_since', default=300000, type=int)
     parser.add_argument('--sample_time', default=100, type=int)
     parser.add_argument('--search_size', default=100, type=int)
-    parser.add_argument('--action_prob', default=[0.4,0.3,0.3], type=list)
+    parser.add_argument('--action_prob', default=[0.3,0.3,0.3,0.3], type=list)
     parser.add_argument('--threshold', default=0.1, type=float)
     parser.add_argument('--just_acc_rate', default=0.0, type=float)
     parser.add_argument('--sim_mode', default='keyword', type=str)
     parser.add_argument('--save_path', default='temp.txt', type=str)
-    parser.add_argument('--tf_path', default='data/tfmodel/', type=str)
+    parser.add_argument('--forward_save_path', default='data/tfmodel/forward.ckpt', type=str)
+    parser.add_argument('--backward_save_path', default='data/tfmodel/backward.ckpt', type=str)
     
     d = vars(parser.parse_args())
     option = Option(d)
@@ -184,7 +185,18 @@ def main():
                 backwardmodel.load_state_dict(torch.load(f))
         forwardmodel.eval()
         backwardmodel.eval()
-        metropolisHasting(option, dataclass, forwardmodel, backwardmodel)
+        generated_word_lists = metropolisHasting(option, dataclass, forwardmodel, backwardmodel)
+        savetexts(generated_word_lists,option.save_path)
+        # Evaluate model scores
+        if option.reference_path is not None:
+            actual_word_lists = []
+            with open(option.reference_path) as f:
+                for line in f:
+                    actual_word_lists.append([line.strip().split()])
+
+            bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
+            print('bleu scores:', bleu_scores)
+
 
     print("="*36 + "Finish" + "="*36)
 
