@@ -162,17 +162,6 @@ def main():
         generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel,\
                 sim_mode = option.sim_mode)
         savetexts(generated_word_lists,option.save_path)
-        # Evaluate model scores
-        if option.reference_path is not None:
-            actual_word_lists = []
-            with open(option.reference_path) as f:
-                for line in f:
-                    actual_word_lists.append([line.strip().split()])
-
-            bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
-            print('bleu scores:', bleu_scores)
-
-
     elif option.mode == 'mh':
         forwardmodel = RNNModel(option).cuda()
         backwardmodel = RNNModel(option).cuda()
@@ -187,15 +176,6 @@ def main():
         backwardmodel.eval()
         generated_word_lists = metropolisHasting(option, dataclass, forwardmodel, backwardmodel)
         savetexts(generated_word_lists,option.save_path)
-        # Evaluate model scores
-        if option.reference_path is not None:
-            actual_word_lists = []
-            with open(option.reference_path) as f:
-                for line in f:
-                    actual_word_lists.append([line.strip().split()])
-
-            bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
-            print('bleu scores:', bleu_scores)
 
 
     print("="*36 + "Finish" + "="*36)
