@@ -453,7 +453,26 @@ class BertEncoding():
         input_ids = input_ids.to(self.device)
         input_mask = input_mask.to(self.device)
         segment_ids = segment_ids.to(self.device)
-        representation = self.model(input_ids, segment_ids, input_mask) # 1,768
+        _,representation = self.model(input_ids, segment_ids, input_mask) # 1,768
+
+        return representation.detach()
+
+    def get_representation(self, sents, max_seq_length=15):
+        label_list = self.processor.get_labels()
+        eval_examples = self.processor.get_dev_examples(sents=sents)
+        # for e in eval_examples:
+        #     print('----------------', e.text_a)
+        eval_features = convert_examples_to_features(
+            eval_examples, label_list, max_seq_length, self.tokenizer)
+        input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+
+        input_ids = input_ids.to(self.device)
+        input_mask = input_mask.to(self.device)
+        segment_ids = segment_ids.to(self.device)
+        representation,_ = self.model(input_ids, segment_ids, input_mask) # 1,768
 
         return representation.detach()
 

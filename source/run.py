@@ -161,7 +161,6 @@ def main():
         backwardmodel.eval()
         generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel,\
                 sim_mode = option.sim_mode)
-        savetexts(generated_word_lists,option.save_path)
     elif option.mode == 'mh':
         forwardmodel = RNNModel(option).cuda()
         backwardmodel = RNNModel(option).cuda()
@@ -175,7 +174,6 @@ def main():
         forwardmodel.eval()
         backwardmodel.eval()
         generated_word_lists = metropolisHasting(option, dataclass, forwardmodel, backwardmodel)
-        savetexts(generated_word_lists,option.save_path)
 
 
     print("="*36 + "Finish" + "="*36)

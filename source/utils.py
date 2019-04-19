@@ -56,6 +56,13 @@ def savetexts(sent_list, file_name):
         fileobject.write('\n')
     fileobject.close()
 
+def appendtext(text, file_name):
+    # list(list(word))
+    fileobject = open(file_name, 'a+')
+    fileobject.write(' '.join(text))
+    fileobject.write('\n')
+    fileobject.close()
+
 
 if __name__ == "__main__":
     sent = 'I 地方have999 a33)) pretty-computer.'
