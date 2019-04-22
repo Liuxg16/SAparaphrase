@@ -13,10 +13,11 @@ with open(file_name) as f:
     csv_reader = csv.reader(f, delimiter=',')
     title = True
     for row in csv_reader:
-        ques1 = utils.clarify(row[3])
-        ques2 = utils.clarify(row[4])
+        
+        ques1 = utils.clarify(row[3]).lower()
+        ques2 = utils.clarify(row[4]).lower()
 
-        if row[5]== '1' and testnum<1000 and len(ques1.split())<14: # and random.random()>0.5:
+        if row[5]== '1' and testnum<1000 and len(ques1.split())<15 and random.random()>0.5:
             test_object.write(ques1)
             test_object.write('\n')
             refer_object.write(ques2)

@@ -1042,4 +1042,4 @@ class SentenceBert(PreTrainedBertModel):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
 
         encoding, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
-        return encoding.cpu(),pooled_output.cpu()
+        return encoding,pooled_output

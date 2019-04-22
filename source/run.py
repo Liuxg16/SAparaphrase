@@ -86,7 +86,7 @@ def main():
     parser.add_argument('--emb_path', default='data/quora/emb.pkl', type=str)
     parser.add_argument('--max_key', default=3, type=float)
     parser.add_argument('--max_key_rate', default=0.5, type=float)
-    parser.add_argument('--rare_since', default=300000, type=int)
+    parser.add_argument('--rare_since', default=30000, type=int)
     parser.add_argument('--sample_time', default=100, type=int)
     parser.add_argument('--search_size', default=100, type=int)
     parser.add_argument('--action_prob', default=[0.3,0.3,0.3,0.3], type=list)
@@ -148,17 +148,18 @@ def main():
         experiment.train()
     
     if option.mode == 'sa':
-        forwardmodel = RNNModel(option).cuda()
-        backwardmodel = RNNModel(option).cuda()
-        if option.forward_path is  not None: 
-            with open(option.forward_path, 'rb') as f:
-                forwardmodel.load_state_dict(torch.load(f))
+        # forwardmodel = RNNModel(option).cuda()
+        # backwardmodel = RNNModel(option).cuda()
+        # if option.forward_path is  not None: 
+        #     with open(option.forward_path, 'rb') as f:
+        #         forwardmodel.load_state_dict(torch.load(f))
 
-        if option.backward_path is  not None: 
-            with open(option.backward_path, 'rb') as f:
-                backwardmodel.load_state_dict(torch.load(f))
-        forwardmodel.eval()
-        backwardmodel.eval()
+        # if option.backward_path is  not None: 
+        #     with open(option.backward_path, 'rb') as f:
+        #         backwardmodel.load_state_dict(torch.load(f))
+        # forwardmodel.eval()
+        # backwardmodel.eval()
+        forwardmodel, backwardmodel = 0,0
         generated_word_lists = simulatedAnnealing(option, dataclass, forwardmodel, backwardmodel,\
                 sim_mode = option.sim_mode)
     elif option.mode == 'mh':
