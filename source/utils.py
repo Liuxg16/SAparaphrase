@@ -579,6 +579,8 @@ def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searc
 
 def normalize(x, e=0.05):
     tem = copy(x)
+    if max(tem)==0:
+        tem += e
     return tem/tem.sum()
 
 def sample_from_candidate(prob_candidate):
