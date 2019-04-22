@@ -1,6 +1,7 @@
 import os
+import numpy as np
 import time,random
-from sampling import simulatedAnnealing
+from sampling import *
 import argparse
 from utils import Option
 
@@ -11,7 +12,6 @@ def main():
     parser.add_argument('--seed', default=33, type=int)
     parser.add_argument('--gpu', default="3", type=str)
     parser.add_argument('--no_train', default=False, action="store_true")
-    parser.add_argument('--no_preds', default=False, action="store_true")
     parser.add_argument('--exps_dir', default=None, type=str)
     parser.add_argument('--exp_name', default=None, type=str)
     parser.add_argument('--load', default=None, type=str)
@@ -66,13 +66,15 @@ def main():
     parser.add_argument('--forward_save_path', default='data/tfmodel/forward.ckpt', type=str)
     parser.add_argument('--backward_save_path', default='data/tfmodel/backward.ckpt', type=str)
     parser.add_argument('--max_grad_norm', default=5, type=float)
-    
     parser.add_argument('--keep_prob', default=1, type=float)
+    parser.add_argument('--N_repeat', default=3, type=int)
+    parser.add_argument('--C', default=0.05, type=float)
 
     d = vars(parser.parse_args())
     option = Option(d)
 
     random.seed(option.seed)
+    np.random.seed(option.seed)
     os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
     config = option
     simulatedAnnealing(option)

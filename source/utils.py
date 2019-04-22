@@ -7,6 +7,7 @@ from nltk.translate.bleu_score import corpus_bleu
 from zpar import ZPar
 from data import array_data
 from copy import copy
+import collections, math
 
 
 bleu_score_weights = {
@@ -15,6 +16,89 @@ bleu_score_weights = {
     3: (0.34, 0.33, 0.33, 0.0),
     4: (0.25, 0.25, 0.25, 0.25),
 }
+
+
+def _get_ngrams(segment, max_order):
+  """Extracts all n-grams upto a given maximum order from an input segment.
+  Args:
+    segment: text segment from which n-grams will be extracted.
+    max_order: maximum length in tokens of the n-grams returned by this
+        methods.
+  Returns:
+    The Counter containing all n-grams upto max_order in segment
+    with a count of how many times each n-gram occurred.
+  """
+  ngram_counts = collections.Counter()
+  for order in range(1, max_order + 1):
+    for i in range(0, len(segment) - order + 1):
+      ngram = tuple(segment[i:i+order])
+      ngram_counts[ngram] += 1
+  return ngram_counts
+
+
+def compute_bleu(reference_corpus, translation_corpus, max_order=4,
+                 smooth=False):
+  """Computes BLEU score of translated segments against one or more references.
+  Args:
+    reference_corpus: list of lists of references for each translation. Each
+        reference should be tokenized into a list of tokens.
+    translation_corpus: list of translations to score. Each translation
+        should be tokenized into a list of tokens.
+    max_order: Maximum n-gram order to use when computing BLEU score.
+    smooth: Whether or not to apply Lin et al. 2004 smoothing.
+  Returns:
+    3-Tuple with the BLEU score, n-gram precisions, geometric mean of n-gram
+    precisions and brevity penalty.
+  """
+  matches_by_order = [0] * max_order
+  possible_matches_by_order = [0] * max_order
+  reference_length = 0
+  translation_length = 0
+  for (references, translation) in zip(reference_corpus,
+                                       translation_corpus):
+    reference_length += min(len(r) for r in references)
+    translation_length += len(translation)
+
+    merged_ref_ngram_counts = collections.Counter()
+    for reference in references:
+      merged_ref_ngram_counts |= _get_ngrams(reference, max_order)
+    translation_ngram_counts = _get_ngrams(translation, max_order)
+    overlap = translation_ngram_counts & merged_ref_ngram_counts
+    for ngram in overlap:
+      matches_by_order[len(ngram)-1] += overlap[ngram]
+    for order in range(1, max_order+1):
+      possible_matches = len(translation) - order + 1
+      if possible_matches > 0:
+        possible_matches_by_order[order-1] += possible_matches
+
+  precisions = [0] * max_order
+  for i in range(0, max_order):
+    if smooth:
+      precisions[i] = ((matches_by_order[i] + 1.) /
+                       (possible_matches_by_order[i] + 1.))
+    else:
+      if possible_matches_by_order[i] > 0:
+        precisions[i] = (float(matches_by_order[i]) /
+                         possible_matches_by_order[i])
+      else:
+        precisions[i] = 0.0
+
+  if min(precisions) > 0:
+    p_log_sum = sum((1. / max_order) * math.log(p) for p in precisions)
+    geo_mean = math.exp(p_log_sum)
+  else:
+    geo_mean = 0
+
+  ratio = float(translation_length) / reference_length
+
+  if ratio > 1.0:
+    bp = 1.
+  else:
+    bp = math.exp(1 - 1. / ratio)
+
+  bleu = geo_mean * bp
+
+  return bleu
 
 
 def get_corpus_bleu_scores(actual_word_lists, generated_word_lists):
@@ -62,7 +146,7 @@ def savetexts(sent_list, file_name):
 def appendtext(text, file_name):
     # list(list(word))
     fileobject = open(file_name, 'a+')
-    fileobject.write(' '.join(text))
+    fileobject.write(text)
     fileobject.write('\n')
     fileobject.close()
 
@@ -208,16 +292,13 @@ def sigma_word_bert(x):
     x8 = torch.gt(x,0.8).float()
     return x*x9+(x-0.8)*9*x8
 
-
 def sigma_bleu(x):
-    if x>0.9:
-        return  1-x+0.01 # 0.1-0
-    elif x>0.8:
-        return 1-(x-0.8)*9 # 0.1-1
+    if x>0.8:
+        return  1-x+0.01 # 0.2-0
+    elif x>0.4:
+        return 1-(x-0.4)*2 # 0.2-1
     else:
         return 1
-    #return max(0, 1-((x-1))**2)
-    #return (((np.abs(x)+x)*0.5-0.6)/0.4)**2
 
 def sigmoid(x):
     s = 1 / (1 + np.exp(-x))
@@ -343,7 +424,6 @@ def similarity_keyword_batch(s1_lists, s2s, sta_vecs, id2sen, emb_word, option, 
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
-
 def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
     N_candidant = len(s1_list) 
@@ -372,6 +452,7 @@ def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, mo
 def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
     sims=  []
+    bleus = []
     for s1 in s1_list:
         emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
         #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
@@ -391,16 +472,16 @@ def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, mode
         sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
         sim = sigma_word(sim)
         sims.append(sim)
-    bleus = []
-    for s1 in s1_list:
-        actual_word_lists = [[id2sen(s2)]*len(s1_list)]
+
+        actual_word_lists = [[id2sen(s2)]]
         generated_word_lists = [id2sen(s1)]
-        bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[3]
+        # bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[3]
+        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
+        bleu_score = sigma_bleu(bleu_score)
         bleus.append(bleu_score)
 
     # bleus = (1.0-sigmoid(np.minimum(bleus,0.9999)))
-    bleus = (1.0-np.minimum(bleus,0.99))
-    res = np.array(sims)*bleus
+    res = np.array(sims)*np.array(bleus)
     return res
 
 def similarity_keyword_bert(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
@@ -565,7 +646,7 @@ def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searc
     if mode==2:
         for i in range(sequence_length[0]-ind-2):
             input_new[: , ind+i+1]=input_new[: , ind+i+2]
-        for i in range(sequence_length[0]-1, option.num_steps-1):
+        for i in range(sequence_length[0]-1, option.num_steps):
             input_new[: , i]=input_new[: , i]*0+option.dict_size+1
         sequence_length_new=sequence_length_new-1
         return input_new[:1], sequence_length_new[:1]

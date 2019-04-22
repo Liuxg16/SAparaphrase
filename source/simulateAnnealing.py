@@ -494,8 +494,6 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
     for i in range(search_size):
         input_new[:,i,ind+1]=ind_token[:,i]
     return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
- 
-
 
 def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searching_size, option,\
         mode=0, calibrated_set = None):
@@ -512,10 +510,12 @@ def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searc
     sequence_length_new=np.array([sequence_length[0]]*search_size)
     length=sequence_length[0]-1
     if mode==2:
+        print(input_new, ind)
         for i in range(sequence_length[0]-ind-2):
             input_new[: , ind+i+1]=input_new[: , ind+i+2]
         for i in range(sequence_length[0]-1, option.num_steps-1):
             input_new[: , i]=input_new[: , i]*0+option.dict_size+1
+        print(input_new, ind)
         sequence_length_new=sequence_length_new-1
         return input_new[:1], sequence_length_new[:1]
     if mode==1:

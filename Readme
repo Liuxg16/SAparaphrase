@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=1 python3 bertinterface.py
 # sampling
 # hm
 python3 source/run.py --no_train  --exps_dir test --exp_name test --gpu 1  --mode mh  --forward_path exps/forward/ckpt/model-best.pkl  --backward_path exps/backward/ckpt/model-best.pkl  --hidden_size 512 --sample_time 100  --search_size 100  --data_path data/quora/test.txt --sim_mode keyword  --save_path log.log  --use_data_path data/input/input.txt --reference_path data/input/refer.txt
-# basic sa, 
+# basic sa, 9b93cd6f0fc143a7887ca114b21afe702e151d32
 python3 source/run.py --mode use --use_data_path data/input/input.txt
 
 # evaluate
