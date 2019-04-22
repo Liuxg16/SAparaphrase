@@ -4,7 +4,7 @@ import os, random
 import copy
 from math import ceil
 from collections import Counter
-import utils, torch
+import torch
 
 class Dicts(object):
     def __init__(self, dict_path):

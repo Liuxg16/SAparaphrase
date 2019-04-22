@@ -574,85 +574,101 @@ def data_type():
 class PTBModel(object):
   #The language model.
 
-    def __init__(self, is_training,option, is_test_LM=False):
-        self.option = option
-        self._is_training = is_training
-        self.num_layers  =2
-        self.num_steps = option.num_steps
-        size = 300 #option.hidden_size
-        self.hidden_size = size
-        vocab_size = option.vocab_size
-        self._input=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
-        self._target=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
-        self._sequence_length=tf.placeholder(shape=[None], dtype=tf.int32)
-        with tf.device("/cpu:0"):
-          embedding = tf.get_variable("embedding", [vocab_size, size], dtype=data_type())
-          inputs = tf.nn.embedding_lookup(embedding, self._input)
-        softmax_w = tf.get_variable(
-              "softmax_w", [size, vocab_size], dtype=data_type())
-        softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
-        output = self._build_rnn_graph(inputs, self._sequence_length, is_training)
+  def __init__(self, is_training, option,is_test_LM=False):
+    self._is_training = is_training
+    self.batch_size = option.batch_size
+    self.num_steps = option.num_steps
+    size = option.hidden_size
+    self.hidden_size = option.hidden_size
+    self.num_layers = option.num_layers
+    self.keep_prob = option.keep_prob
+    vocab_size = option.vocab_size
+    self._input=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
+    self._target=tf.placeholder(shape=[None, option.num_steps], dtype=tf.int32)
+    self._sequence_length=tf.placeholder(shape=[None], dtype=tf.int32)
+    with tf.device("/cpu:0"):
+      embedding = tf.get_variable("embedding", [vocab_size, size], dtype=data_type())
+      inputs = tf.nn.embedding_lookup(embedding, self._input)
+    softmax_w = tf.get_variable(
+          "softmax_w", [size, vocab_size], dtype=data_type())
+    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
+    if is_training and option.keep_prob < 1:
+      inputs = tf.nn.dropout(inputs, option.keep_prob)
+    output = self._build_rnn_graph(inputs, self._sequence_length, is_training)
 
-        output=tf.reshape(output, [-1, self.hidden_size])
-        logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
-          # Reshape logits to be a 3-D tensor for sequence loss
-        logits = tf.reshape(logits, [-1, self.num_steps, vocab_size])
-        self._output_prob=tf.nn.softmax(logits)
-          # Use the contrib sequence loss and average over the batches
-        mask=tf.sequence_mask(lengths=self._sequence_length, maxlen=self.num_steps, dtype=data_type())
-        loss = tf.contrib.seq2seq.sequence_loss(
-          logits,
-          self._target,
-          mask, 
-          average_across_timesteps=True,
-          average_across_batch=True)
+    output=tf.reshape(output, [-1, option.hidden_size])
+    logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+      # Reshape logits to be a 3-D tensor for sequence loss
+    logits = tf.reshape(logits, [-1, self.num_steps, vocab_size])
+    self._output_prob=tf.nn.softmax(logits)
+      # Use the contrib sequence loss and average over the batches
+    mask=tf.sequence_mask(lengths=self._sequence_length, maxlen=self.num_steps, dtype=data_type())
+    loss = tf.contrib.seq2seq.sequence_loss(
+      logits,
+      self._target,
+      mask, 
+      average_across_timesteps=True,
+      average_across_batch=True)
 
-        # Update the cost
-        self._cost = loss
+    # Update the cost
+    self._cost = loss
 
-        #self._lr = tf.Variable(0.0, trainable=False)
-        tvars = tf.trainable_variables()
 
-    def _build_rnn_graph(self, inputs, sequence_length, is_training):
-        return self._build_rnn_graph_lstm(inputs, sequence_length, is_training)
+    #self._lr = tf.Variable(0.0, trainable=False)
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(self._cost, tvars),
+                                      option.max_grad_norm)
+    optimizer = tf.train.AdamOptimizer()
+    self._train_op = optimizer.apply_gradients(
+        zip(grads, tvars),
+        global_step=tf.train.get_or_create_global_step())
 
-    def _get_lstm_cell(self, is_training):
-        return tf.contrib.rnn.BasicLSTMCell(
+  def _build_rnn_graph(self, inputs, sequence_length, is_training):
+    return self._build_rnn_graph_lstm(inputs, sequence_length, is_training)
+
+  def _get_lstm_cell(self, is_training):
+    return tf.contrib.rnn.BasicLSTMCell(
           self.hidden_size, forget_bias=0.0, state_is_tuple=True,
           reuse=not is_training)
 
-    def _build_rnn_graph_lstm(self, inputs, sequence_length, is_training):
-        """Build the inference graph using canonical LSTM cells."""
-        # Slightly better results can be obtained with forget gate biases
-        # initialized to 1 but the hyperparameters of the model would need to be
-        # different than reported in the paper.
-        def make_cell():
-          cell = self._get_lstm_cell( is_training)
-          if is_training:
-            cell = tf.contrib.rnn.DropoutWrapper(
-                cell, output_keep_prob=0.1)
-          return cell
+  def _build_rnn_graph_lstm(self, inputs, sequence_length, is_training):
+    """Build the inference graph using canonical LSTM cells."""
+    # Slightly better results can be obtained with forget gate biases
+    # initialized to 1 but the hyperparameters of the model would need to be
+    # different than reported in the paper.
+    def make_cell():
+      cell = self._get_lstm_cell( is_training)
+      if is_training and self.keep_prob < 1:
+        cell = tf.contrib.rnn.DropoutWrapper(
+            cell, output_keep_prob=self.keep_prob)
+      return cell
 
-        cell = tf.contrib.rnn.MultiRNNCell(
-            [make_cell() for _ in range(self.num_layers)], state_is_tuple=True)
-        outputs, states=tf.nn.dynamic_rnn(cell=cell, inputs=inputs, sequence_length=sequence_length, dtype=data_type())
+    cell = tf.contrib.rnn.MultiRNNCell(
+        [make_cell() for _ in range(self.num_layers)], state_is_tuple=True)
+    outputs, states=tf.nn.dynamic_rnn(cell=cell, inputs=inputs, sequence_length=sequence_length, dtype=data_type())
 
-        return outputs
+    return outputs
+  
+
 
 def run_epoch(sess, model, input, sequence_length, target=None, mode='train'):
-    #Runs the model on the given data.
-    if mode=='train':
-        #train language model
-        _,cost = sess.run([model._train_op, model._cost], feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
-        return cost
-    elif mode=='test':
-        #test language model
-        cost = sess.run(model._cost, feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
-        return cost
-    else:
-        #use the language model to calculate sentence probability
-        output_prob = sess.run(model._output_prob, feed_dict={model._input: input, model._sequence_length:sequence_length})
-        return output_prob
+  #Runs the model on the given data.
+  if mode=='train':
+    #train language model
+    _,cost = sess.run([model._train_op, model._cost], feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
+    return cost
+  elif mode=='test':
+    #test language model
+    cost = sess.run(model._cost, feed_dict={model._input: input, model._target:target, model._sequence_length:sequence_length})
+    return cost
+  else:
+    #use the language model to calculate sentence probability
+    output_prob = sess.run(model._output_prob, feed_dict={model._input: input, model._sequence_length:sequence_length})
+    return output_prob
+
+
+
+
 
 def metropolisHasting(option, dataclass,forwardmodel, backwardmodel):
     tfflag = True
@@ -1249,34 +1265,65 @@ def simulatedAnnealing_bat(option, dataclass,forwardmodel, backwardmodel, sim_mo
 
 def simulatedAnnealing(option, dataclass,forwardmodel, backwardmodel, sim_mode = 'keyword'):
     tfflag = True
-    if tfflag:
-        with tf.name_scope("forward_train"):
-            with tf.variable_scope("forward", reuse=None):
-                m_forward = PTBModel(is_training=True,option=option)
-        with tf.name_scope("forward_test"):
-            with tf.variable_scope("forward", reuse=True):
-                mtest_forward = PTBModel(is_training=False,option=option)
-        var=tf.trainable_variables()
-        var_forward=[x for x in var if x.name.startswith('forward')]
-        saver_forward=tf.train.Saver(var_forward, max_to_keep=1)
-
-        with tf.name_scope("backward_train"):
-            with tf.variable_scope("backward", reuse=None):
-                m_backward = PTBModel(is_training=True,option=option)
-
-        with tf.name_scope("backward_test"):
-            with tf.variable_scope("backward", reuse=True):
-                mtest_backward = PTBModel(is_training=False, option=option)
-        var=tf.trainable_variables()
-        var_backward=[x for x in var if x.name.startswith('backward')]
-        saver_backward=tf.train.Saver(var_backward, max_to_keep=1)
-
-        init = tf.global_variables_initializer()
-        session = tf.Session()
+    with tf.name_scope("forward_train"):
+        with tf.variable_scope("forward", reuse=None):
+            m_forward = PTBModel(is_training=True, option=option)
+    with tf.name_scope("forward_test"):
+        with tf.variable_scope("forward", reuse=True):
+            mtest_forward = PTBModel(is_training=False, option=option)
+    var=tf.trainable_variables()
+    var_forward=[x for x in var if x.name.startswith('forward')]
+    saver_forward=tf.train.Saver(var_forward, max_to_keep=1)
+    with tf.name_scope("backward_train"):
+        with tf.variable_scope("backward", reuse=None):
+            m_backward = PTBModel(is_training=True, option=option)
+    with tf.name_scope("backward_test"):
+        with tf.variable_scope("backward", reuse=True):
+            mtest_backward = PTBModel(is_training=False,option=option)
+    var=tf.trainable_variables()
+    var_backward=[x for x in var if x.name.startswith('backward')]
+    saver_backward=tf.train.Saver(var_backward, max_to_keep=1)
+    
+    print('line1295-------------------')
+    init = tf.global_variables_initializer()
+    with tf.Session() as session:
         session.run(init)
+
 
         saver_forward.restore(session, option.forward_save_path)
         saver_backward.restore(session, option.backward_save_path)
+
+    print('line1295-------------------')
+
+
+    # if tfflag:
+    #     with tf.name_scope("forward_train"):
+    #         with tf.variable_scope("forward", reuse=None):
+    #             m_forward = PTBModel(is_training=True,option=option)
+    #     with tf.name_scope("forward_test"):
+    #         with tf.variable_scope("forward", reuse=True):
+    #             mtest_forward = PTBModel(is_training=False,option=option)
+    #     var=tf.trainable_variables()
+    #     var_forward=[x for x in var if x.name.startswith('forward')]
+    #     saver_forward=tf.train.Saver(var_forward, max_to_keep=1)
+
+    #     with tf.name_scope("backward_train"):
+    #         with tf.variable_scope("backward", reuse=None):
+    #             m_backward = PTBModel(is_training=True,option=option)
+
+    #     with tf.name_scope("backward_test"):
+    #         with tf.variable_scope("backward", reuse=True):
+    #             mtest_backward = PTBModel(is_training=False, option=option)
+    #     var=tf.trainable_variables()
+    #     var_backward=[x for x in var if x.name.startswith('backward')]
+    #     saver_backward=tf.train.Saver(var_backward, max_to_keep=1)
+
+    #     init = tf.global_variables_initializer()
+    #     session = tf.Session()
+    #     session.run(init)
+
+    #     saver_forward.restore(session, option.forward_save_path)
+    #     saver_backward.restore(session, option.backward_save_path)
 
     similaritymodel = None
     if sim_mode == 'keyword':
