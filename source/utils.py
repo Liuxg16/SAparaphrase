@@ -257,15 +257,6 @@ def read_data_use1(option,  sen2id):
     data_new=array_data(data, max_length, dict_size)
     return data_new, sta_vec_list # sentence, keyvector
 
-def choose_action(c):
-    r=np.random.random()
-    c=np.array(c)
-    for i in range(1, len(c)):
-        c[i]=c[i]+c[i-1]
-    for i in range(len(c)):
-        if c[i]>=r:
-            return i
-
 def sigma_word(x):
     if x>0.7:
         return x
@@ -293,12 +284,13 @@ def sigma_word_bert(x):
     return x*x9+(x-0.8)*9*x8
 
 def sigma_bleu(x):
-    if x>0.8:
-        return  1-x+0.01 # 0.2-0
-    elif x>0.4:
-        return 1-(x-0.4)*2 # 0.2-1
-    else:
-        return 1
+    #if x>0.8:
+    #    return  1-x+0.01 # 0.2-0
+    #elif x>0.4:
+    #    return 1-(x-0.4)*2 # 0.2-1
+    #else:
+    #    return 1
+    return 1-x+0.01
 
 def sigmoid(x):
     s = 1 / (1 + np.exp(-x))
@@ -607,8 +599,8 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
     sequence_length_new=np.array([[length]*search_size for length in sequence_length]) #K,100
     length=sequence_length[0]-1
     if mode!=2:
-        ind_token=np.argsort(prob[:,: option.dict_size],1)[-search_size:] #K,100
-        print(ind_token.shape)
+        ind_token=np.argsort(prob[:,: option.dict_size],1) #K,vocab
+        ind_token = ind_token[:,-search_size:] #K,100
     
     if mode==2:
         for k in range(len(input)):
@@ -623,11 +615,10 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
             for i in range(0, sequence_length_new[k]-1-ind):
                 input_new[: , sequence_length_new[k]-i]=input_new[: ,  sequence_length_new[k]-1-i]
         sequence_length_new=sequence_length_new+1
+
     for i in range(search_size):
         input_new[:,i,ind+1]=ind_token[:,i]
     return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
- 
-
 
 def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searching_size, option,\
         mode=0, calibrated_set = None):
@@ -637,8 +628,8 @@ def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searc
             ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
         else:
             search_size = searching_size+len(calibrated_set)
-            ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
-            ind_token = np.concatenate([ind_token,np.array(input[0])],0)
+            ind_token=np.argsort(prob[: option.dict_size])[-searching_size:]
+            ind_token = np.concatenate([ind_token,np.array(calibrated_set)],0)
 
     input_new=np.array([input[0]]*search_size)
     sequence_length_new=np.array([sequence_length[0]]*search_size)
@@ -664,6 +655,28 @@ def normalize(x, e=0.05):
         tem += e
     return tem/tem.sum()
 
+def choose_action(c):
+    r=np.random.random()
+    c=np.array(c)
+    for i in range(1, len(c)):
+        c[i]=c[i]+c[i-1]
+    for i in range(len(c)):
+        if c[i]>=r:
+            return i
+
+def choose_an_action(c):
+    # c,list
+    r=np.random.random()
+    if np.sum(c)==0:
+        return len(c)-1
+    for i in range(len(c)):
+        if i>0:
+            c[i]=c[i]+c[i-1]
+        if c[i]>=r:
+            return i
+
+
+
 def sample_from_candidate(prob_candidate):
     return choose_action(normalize(prob_candidate))
 
@@ -673,8 +686,8 @@ def samplep(probs):
     M = probs.shape[0]
     samples = []
     for i in range(M):
-        a = np.random.choice(range(N), 1, replace=True, p=probs[i])
-        samples.append(a[0])
+        a = choose_an_action(probs[i])
+        samples.append(a)
     return np.array(samples)
 
 def just_acc(option):
@@ -713,10 +726,6 @@ class Option(object):
         with open(os.path.join(self.this_expsdir, "option.txt"), "w") as f:
             for key, value in sorted(self.__dict__.items(), key=lambda x: x[0]):
                 f.write("%s, %s\n" % (key, str(value)))
-
-
-
-
 
 if __name__ == "__main__":
     sent = 'I 地方have999 a33)) pretty-computer.'

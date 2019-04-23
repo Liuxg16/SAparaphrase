@@ -31,7 +31,7 @@ def main():
     parser.add_argument('--dropout', default=0.0, type=float)
     parser.add_argument('--model', default=0, type=int)
     # optimization
-    parser.add_argument('--batch_size', default=128, type=int)
+    parser.add_argument('--batch_size', default=1, type=int)
     parser.add_argument('--epochs', default=200, type=int)
     parser.add_argument('--learning_rate', default=0.001, type=float)
     parser.add_argument('--weight_decay', default=0.00, type=float)
@@ -77,7 +77,10 @@ def main():
     np.random.seed(option.seed)
     os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
     config = option
-    simulatedAnnealing(option)
+    if option.batch_size==1:
+        simulatedAnnealing(option)
+    else:
+        simulatedAnnealing_batch(option)
 
     print("="*36 + "Finish" + "="*36)
 
