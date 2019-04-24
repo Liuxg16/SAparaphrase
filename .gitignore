@@ -8,3 +8,4 @@ POS
 *.swp
 *.tsv
 paraphrase
+nohup.out
