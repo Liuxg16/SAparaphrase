@@ -7,7 +7,7 @@ from nltk.translate.bleu_score import corpus_bleu
 from zpar import ZPar
 from data import array_data
 from copy import copy
-import collections, math
+import collections, math, torch
 
 
 bleu_score_weights = {
@@ -173,6 +173,9 @@ def keyword_pos2sta_vec(option,keyword, pos):
             sta_vec.append(1)
         else:
             sta_vec.append(0)
+    # liuxg
+    if np.sum(sta_vec)==0:
+        sta_vec[0] =1
     return sta_vec
 
 def read_data_use(option,  sen2id):
@@ -266,6 +269,12 @@ def sigma_word(x):
         return 0
     #return max(0, 1-((x-1))**2)
     #return (((np.abs(x)+x)*0.5-0.6)/0.4)**2
+def sigma_word_batch(x):
+    # x:K,
+    x9 = torch.gt(x,0.7).float()
+    x8 = torch.gt(x,0.65).float()
+    return x*x9+(x-0.65)*14*x8
+
 
 def sigma_word1(x):
     if x>0.9:
@@ -391,30 +400,24 @@ def similarity_keyword(s1_list, s2, sta_vec, id2sen, emb_word, option, model = N
         norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e)) #N*N
         sim_mat=np.dot(norm2,emb_mat).dot(norm1) #N*M
         sim_vec=sim_mat.max(axis=1) #N
-        # debug
-        # print('sss',sim_vec)
-        # print(wei2)
-        # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
         sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
         sim = sigma_word(sim)
         sims.append(sim)
+        # print(' '.join(id2sen(s1)), ' '.join(id2sen(s2)), sim)
+        # print(sim_vec*wei2)
     res = np.array(sims)
     return res
 
-
     def similarity_batch_word(s1, s2, sta_vec, option):
         return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
-def similarity_keyword_batch(s1_lists, s2s, sta_vecs, id2sen, emb_word, option, model = None):
+def similarity_batch(s1_lists, s2s, sta_vecs, id2sen, emb_word, option, simfun, model = None):
     simss= []
     for s1_list,s2, sta_vec in zip(s1_lists,s2s, sta_vecs):
-        sims = similarity_keyword(s1_list, s2, sta_vec, id2sen, emb_word, option, model)
+        sims = simfun(s1_list, s2, sta_vec, id2sen, emb_word, option, model)
         simss.append(sims)
-    return simss
-
-
-    def similarity_batch_word(s1, s2, sta_vec, option):
-        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
+    res = np.concatenate(simss,0)
+    return res
 
 def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
@@ -429,7 +432,7 @@ def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, mo
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
     emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
     # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
-    wei2= torch.tensor([0]+sta_vec[:emb2.size(1)-1],dtype=torch.uint8) #8
+    wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
     emb_mat = torch.bmm(emb2,emb1) # K,8,7
     norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
     norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
@@ -438,8 +441,44 @@ def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, mo
     sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
     sim_vec,_ = torch.max(sim_mat,2)  # K,8
     sim,_ = torch.min(sim_vec[:,wei2],1)
-    sim = sigma_word_bert(sim)
+    sim = sigma_word_batch(sim)
     return sim.cpu().numpy()
+
+def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
+    e=1e-5
+    N_candidant = len(s1_list) 
+    sims=  []
+    embs = []
+    bleus = []
+    for s1 in s1_list:
+        emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
+        embs.append(np.expand_dims(emb1,axis=0))
+    emb1 = np.concatenate(embs,0) # K,8,300
+    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
+    emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+    emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
+    # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
+    wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
+    emb_mat = torch.bmm(emb2,emb1) # K,8,7
+    norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
+    norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
+    norm2 = torch.diag_embed(norm2) # K,15,15
+    norm1 = torch.diag_embed(norm1)
+    sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
+    sim_vec,_ = torch.max(sim_mat,2)  # K,8
+    sim,_ = torch.min(sim_vec[:,wei2],1)
+    sim = sigma_word_batch(sim)
+
+    for s1 in s1_list:
+        actual_word_lists = [[id2sen(s2)]]
+        generated_word_lists = [id2sen(s1)]
+        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
+        bleu_score = sigma_bleu(bleu_score)
+        bleus.append(bleu_score)
+
+    res = sim.cpu().numpy()*np.array(bleus)
+    return res
+
 
 def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
@@ -597,7 +636,6 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
     # input, K,L; prob, K,vocab
     input_new=np.array([[inp]*search_size for inp in input]) # K,100,L
     sequence_length_new=np.array([[length]*search_size for length in sequence_length]) #K,100
-    length=sequence_length[0]-1
     if mode!=2:
         ind_token=np.argsort(prob[:,: option.dict_size],1) #K,vocab
         ind_token = ind_token[:,-search_size:] #K,100
@@ -608,13 +646,14 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
                 input_new[k,: , ind+i+1]=input_new[k,: , ind+i+2]
             for i in range(sequence_length[k]-1, option.num_steps-1):
                 input_new[k,: , i]=input_new[k,:, i]*0+option.dict_size+1
-            sequence_length_new=sequence_length_new-1
+        sequence_length_new=sequence_length_new-1
         return input_new, sequence_length_new
     if mode==1:
         for k in range(len(input)):
-            for i in range(0, sequence_length_new[k]-1-ind):
-                input_new[: , sequence_length_new[k]-i]=input_new[: ,  sequence_length_new[k]-1-i]
-        sequence_length_new=sequence_length_new+1
+            tem_len = min(sequence_length[k],14) # avoid overflow
+            for i in range(0, tem_len-1-ind):
+                input_new[k ,:, tem_len-i]=input_new[k ,:,  tem_len-1-i]
+            sequence_length_new[k,:]= np.minimum(sequence_length_new[k,:]+1,15)
 
     for i in range(search_size):
         input_new[:,i,ind+1]=ind_token[:,i]
@@ -706,6 +745,17 @@ def getp(probabilities,input, lengths, option):
         tem*= probs[length-1][option.dict_size+1]
         tems.append(tem)
     return tems
+
+def getppl(probabilities,input, lengths, option):
+    tems = []
+    for probs,inp, length in zip(probabilities,input,lengths):
+        tem = 1
+        for i in range(length-1):
+            tem*= probs[i][inp[i+1]]
+        tem*= probs[length-1][option.dict_size+1]
+        tems.append(np.power(tem,1.0/length))
+    return tems
+
 
 class StrToBytes:
     def __init__(self, fileobj):

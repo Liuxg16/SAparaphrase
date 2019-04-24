@@ -3,6 +3,9 @@ python 3.5
 nltk
 pip3 install python-zpar
 
+# dataset
+twitter: https://languagenet.github.io/
+
 # test bert
 CUDA_VISIBLE_DEVICES=1 python3 bertinterface.py
 
