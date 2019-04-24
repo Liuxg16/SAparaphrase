@@ -1,0 +1,5 @@
+# data
+quora:https://www.kaggle.com/c/quora-question-pairs/data
+# training
+python3 source-py/run.py --exps_dir exps --exp_name forward --gpu 3 --hidden_size 300 --batch_size 512 --dropout 0.2 --data_path data/quora-all.txt
+python3 source-py/run.py --exps_dir exps --exp_name forward --gpu 3 --hidden_size 300 --batch_size 512 --dropout 0.2 --data_path data/quora-all.txt --backward
