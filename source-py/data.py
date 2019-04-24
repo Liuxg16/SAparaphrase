@@ -72,6 +72,7 @@ class Data(object):
                 data=[]
                 for line in f:
                     line = line.strip().lower()
+                    # clear
                     data.append(self.sen2id(line.split()))
         train_data=array_data(data[ : int(len(data)*(tt_proportion-0.05))], max_length, dict_size, shuffle=True)
         valid_data=array_data(data[int(len(data)*(tt_proportion-0.05)): int(len(data)*tt_proportion)], max_length, dict_size, shuffle=True)
@@ -79,6 +80,7 @@ class Data(object):
         return train_data, valid_data, test_data
 
     def _next_batch(self, start, dataclass):
+        start = int(start)
         if not self.option.backward:
             return dataclass(self.option.batch_size, start)
         else:
