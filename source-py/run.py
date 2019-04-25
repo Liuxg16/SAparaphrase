@@ -3,8 +3,9 @@ import numpy as np
 import time,random
 import argparse, torch,data
 from utils import Option
-from models import RNNModel
+from models import RNNModel, PredictingModel
 from experiment import Experiment
+from sampling import simulatedAnnealing_batch
 
 def main():
 
@@ -106,9 +107,11 @@ def main():
 
     if option.model == 0:
         learner = RNNModel(option)
+    elif option.model == 1:
+        learner = PredictingModel(option)
+
 
     learner.to(device)
-    # learner = nn.DataParallel(learner, [0,1,2])
     if option.load is  not None: 
         with open(option.load, 'rb') as f:
             learner.load_state_dict(torch.load(f))
@@ -119,6 +122,19 @@ def main():
     if not option.no_train:
         print("Start training...")
         experiment.train()
+    else: 
+       	forwardmodel = RNNModel(option).cuda()
+        backwardmodel = RNNModel(option).cuda()
+        if option.forward_path is  not None: 
+            with open(option.forward_path, 'rb') as f:
+                forwardmodel.load_state_dict(torch.load(f))
+
+        if option.backward_path is  not None: 
+            with open(option.backward_path, 'rb') as f:
+                backwardmodel.load_state_dict(torch.load(f))
+        forwardmodel.eval()
+        backwardmodel.eval()
+        simulatedAnnealing_batch(option, dataclass, forwardmodel, backwardmodel)
 
 
     print("="*36 + "Finish" + "="*36)

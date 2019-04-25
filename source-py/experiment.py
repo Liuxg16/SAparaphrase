@@ -70,7 +70,6 @@ class Experiment():
         epoch_in_top = [0]
         self.optimizer.zero_grad()
         for batch in range(num_batch):
-            print(batch)
             data, lengths, target= next_fn() # query(relation), head(target), tails
             data = data.to(self.device)
             target = target.to(self.device)
