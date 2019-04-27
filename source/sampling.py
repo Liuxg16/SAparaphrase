@@ -667,7 +667,7 @@ def simulatedAnnealing_batch(config):
                     maxsens[i] = sen
 
         for i in range(N_input):
-            print(maxsens[i],maxVs[i])
+            # print(maxsens[i],maxVs[i])
             appendtext(maxsens[i], option.save_path)
 
 def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
@@ -743,9 +743,9 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_f
                         pass
                     else:
                         input[i] = input1
-                        print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
-                        print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+                        # print('vold, vnew, alpha,simold, simnew', V_old[i],\
+                        #             V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
+                        # print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
 
         elif action==1: # word insert
             
@@ -799,9 +799,9 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_f
                     input1=input_candidate[i][chooseind]
                     input[i] = input1
                     sequence_length[i]  = sequence_length[i]+1
-                    print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+                    # print('vold, vnew, alpha,simold, simnew', V_old[i],\
+                    #                 V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
+                    # print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
 
         elif action==2: # word delete
             prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
@@ -839,9 +839,9 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_f
                     input[i] = input1
                         # calibrated_set.append(input[i][ind])
                     sequence_length[i]  = sequence_length[i]-1
-                    print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_new[i])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+                    # print('vold, vnew, alpha,simold, simnew', V_old[i],\
+                    #                 V_new[i],alpha,similarity_old[i],similarity_new[i])
+                    # print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
 
         pos += 1
     return input,V_old

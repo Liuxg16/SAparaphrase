@@ -269,7 +269,14 @@ def sigma_word(x):
         return 0
     #return max(0, 1-((x-1))**2)
     #return (((np.abs(x)+x)*0.5-0.6)/0.4)**2
+
 def sigma_word_batch(x):
+    # x:K,
+    x9 = torch.gt(x,0.7).float()
+    x8 = (torch.gt(x,0.65)*torch.lt(x, 0.7)).float()
+    return 6*(x*x9+(x-0.65)*14*x8)
+
+def sigma_word_batch1(x):
     # x:K,
     x9 = torch.gt(x,0.7).float()
     x8 = torch.gt(x,0.65).float()
@@ -453,6 +460,8 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     for s1 in s1_list:
         emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
         embs.append(np.expand_dims(emb1,axis=0))
+        if len(id2sen(s1))==0:
+            return np.array([0])
     emb1 = np.concatenate(embs,0) # K,8,300
     emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
@@ -713,6 +722,7 @@ def choose_an_action(c):
             c[i]=c[i]+c[i-1]
         if c[i]>=r:
             return i
+    return len(c)-1
 
 
 
