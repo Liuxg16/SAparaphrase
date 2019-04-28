@@ -52,6 +52,24 @@ class RNNModel(nn.Module):
 		acc = torch.mean(torch.eq(idx,target).float())
 		return loss,acc, decoded.view(batch_size, length, self.ntoken)
 
+	def predict1(self, input):
+		'''
+		bs,15; bs,15
+		'''
+		batch_size = input.size(0)
+		length = input.size(1)
+
+		emb = self.encoder(input)
+		c0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
+		h0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
+		output, hidden = self.rnn(emb, (c0,h0))
+		decoded = nn.Softmax(2)(self.decoder(output)).view(batch_size*length,self.ntoken) # bs,l,vocab
+ 		# bs,l,
+		target = torch.cat([input[:,1:],\
+            torch.ones(batch_size,1).long().cuda()*(self.option.dict_size+1)],1).view(batch_size*length,-1) # bs,l
+		output = torch.gather(decoded, 1, target).view(batch_size,length) # bs,l
+		return output
+
 	def predict(self, input):
 		'''
 		bs,15; bs,15
@@ -59,13 +77,12 @@ class RNNModel(nn.Module):
 		batch_size = input.size(0)
 		length = input.size(1)
 
-		emb = self.drop(self.encoder(input))
+		emb = self.encoder(input)
 		c0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
 		h0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
 		output, hidden = self.rnn(emb, (c0,h0))
-		output = self.drop(output).contiguous().view(batch_size*length,-1)
-		decoded = nn.Softmax(1)(self.decoder(output))
-		return decoded.view(batch_size, length, self.ntoken)
+		decoded = nn.Softmax(2)(self.decoder(output))
+		return decoded
 
 
 
@@ -130,23 +147,20 @@ class PredictingModel(nn.Module):
         acc = torch.mean(torch.eq(idx,target).float())
         return loss,acc, decoded.view(batch_size, self.ntoken)
 
-
     def predict(self, input):
         '''
         bs,15; bs,15
         '''
         batch_size = input.size(0)
         length = input.size(1)
-        # ind = int(random.random()*length)
-        # input[:,ind] = self.ntoken-1
 
-        emb = self.drop(self.encoder(input))
+        emb = self.encoder(input)
         c0 = torch.zeros(2*self.nlayers, batch_size, self.nhid).to(self.device)
         h0 = torch.zeros(2*self.nlayers, batch_size, self.nhid).to(self.device)
         output, hidden = self.rnn(emb, (c0,h0)) # batch, length,2h
         pooled = nn.MaxPool1d(length)(output.permute(0,2,1)) #batch,2h
         decoded = nn.Softmax(1)(self.decoder(pooled.squeeze(2)))
-        return decoded.view(batch_size, self.ntoken)
+        return decoded
 
 
 

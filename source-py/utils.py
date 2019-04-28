@@ -279,7 +279,7 @@ def sigma_word_batch1(x):
     # x:K,
     x9 = torch.gt(x,0.7).float()
     x8 = torch.gt(x,0.65).float()
-    return x*x9+(x-0.65)*14*x8
+    return x*x9+(x-0.65)*14*x8*(1-x9)
 
 
 def sigma_word1(x):
@@ -299,17 +299,20 @@ def sigma_word_bert(x):
     return x*x9+(x-0.8)*9*x8
 
 def sigma_bleu(x):
-    #if x>0.8:
-    #    return  1-x+0.01 # 0.2-0
-    #elif x>0.4:
-    #    return 1-(x-0.4)*2 # 0.2-1
-    #else:
-    #    return 1
-    return 1-x+0.01
+    # if x>0.9:
+    #     return  min(1-x+0.05,1) # 0.2-0
+    # elif x>0.6:
+    #     return 1-(x-0.6)*3 # 0.2-1
+    # else:
+    #     return 1
+    return min(1-x+0.05,1)
+
 
 def sigmoid(x):
     s = 1 / (1 + np.exp(-x))
     return s
+
+
 
 def sen2mat(s, id2sen, emb_word, option):
     mat=[]
@@ -324,6 +327,7 @@ def sen2mat(s, id2sen, emb_word, option):
         else:
             mat.append(np.random.random([option.hidden_size]))
     return np.array(mat)
+
 
 def similarity_semantic(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
     K = 4
@@ -627,11 +631,12 @@ def mask_at_point(input, sequence_length, ind,option, mode=0):
     if mode==0:
         input_new[:, ind+1] = option.dict_size+3
     elif mode==1:
-        input_new[:, ind+1] = option.dict_size+3
-        for j in range(option.num_steps-ind-3):
-            input_new[:, ind+2+j] =  input_new[:, ind+3+j] 
-        sequence_length_new = sequence_length_new+1
+        tem_len = option.num_steps
+        for i in range(1, tem_len-ind-1):
+            input_new[:,tem_len-i]=input_new[: , tem_len-1-i]
 
+        sequence_length_new = sequence_length_new+1
+        input_new[:, ind+1] = option.dict_size+3
     return input_new.astype(np.int32),  sequence_length_new.astype(np.int32)
 
    
@@ -695,20 +700,19 @@ def generate_candidate_input_update(input, sequence_length, ind, prob, search_si
         ind_token = ind_token[:,-search_size:] #K,100
     
     if mode==2:
-        for i in range(option.num_steps-ind-3):
+        for i in range(option.num_steps-ind-2):
             input_new[:,: , ind+i+1]=input_new[:,: , ind+i+2]
+        input_new[:,: , -1]= option.dict_size+1
         sequence_length_new=sequence_length_new-1
         return input_new, sequence_length_new
     if mode==1:
         tem_len = option.num_steps
-        for i in range(1, tem_len-ind):
+        for i in range(1, tem_len-ind-1):
             input_new[:,:, tem_len-i]=input_new[: ,:,  tem_len-1-i]
         sequence_length_new = np.minimum(sequence_length_new+1,tem_len)
 
-    for i in range(search_size):
-        input_new[:,i,ind+1]=ind_token[:,i]
+    input_new[:,:,ind+1]=ind_token[:,:]
     return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
-
 
 def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searching_size, option,\
         mode=0, calibrated_set = None):
@@ -784,6 +788,15 @@ def just_acc(option):
     else:
         return 1
 
+def getp1(probabilities,input, lengths, option):
+    tems = []
+    for probs,inp, length in zip(probabilities,input,lengths):
+        tem = 1
+        for i in range(length):
+            tem*= probs[i]
+        tems.append(tem)
+    return tems
+
 def getp(probabilities,input, lengths, option):
     tems = []
     for probs,inp, length in zip(probabilities,input,lengths):
@@ -793,6 +806,7 @@ def getp(probabilities,input, lengths, option):
         tem*= probs[length-1][option.dict_size+1]
         tems.append(tem)
     return tems
+
 
 def getppl(probabilities,input, lengths, option):
     tems = []
