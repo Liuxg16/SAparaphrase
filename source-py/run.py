@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--forward_path', default=None, type=str)
 
     # sampling
+    parser.add_argument('--mcmc', default='sa', type=str)
     parser.add_argument('--use_data_path', default='data/input/input.txt', type=str)
     parser.add_argument('--reference_path', default=None, type=str)
     parser.add_argument('--pos_path', default='POS/english-models', type=str)
@@ -69,7 +70,7 @@ def main():
     parser.add_argument('--backward_save_path', default='data/tfmodel/backward.ckpt', type=str)
     parser.add_argument('--max_grad_norm', default=5, type=float)
     parser.add_argument('--keep_prob', default=1, type=float)
-    parser.add_argument('--N_repeat', default=3, type=int)
+    parser.add_argument('--N_repeat', default=1, type=int)
     parser.add_argument('--C', default=0.05, type=float)
 
     d = vars(parser.parse_args())
@@ -124,7 +125,10 @@ def main():
         experiment.train()
     else: 
        	forwardmodel = RNNModel(option).cuda()
-        backwardmodel = RNNModel(option).cuda()
+        if option.mcmc=='predicting':
+            backwardmodel = PredictingModel(option).cuda()
+        else:
+            backwardmodel = RNNModel(option).cuda()
         if option.forward_path is  not None: 
             with open(option.forward_path, 'rb') as f:
                 forwardmodel.load_state_dict(torch.load(f))

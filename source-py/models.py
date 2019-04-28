@@ -113,9 +113,11 @@ class PredictingModel(nn.Module):
         '''
         batch_size = input.size(0)
         length = input.size(1)
+
         ind = int(random.random()*length)
+
+        target = input[:,ind].clone()
         input[:,ind] = self.ntoken-1
-        target = target[:,ind]
 
         emb = self.drop(self.encoder(input))
         c0 = torch.zeros(2*self.nlayers, batch_size, self.nhid).to(self.device)

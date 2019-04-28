@@ -269,7 +269,13 @@ def sigma_word(x):
         return 0
     #return max(0, 1-((x-1))**2)
     #return (((np.abs(x)+x)*0.5-0.6)/0.4)**2
+
 def sigma_word_batch(x):
+    # x:K,
+    xc = torch.gt(x,0.7).float()
+    return 16*(x-0.7)*xc
+
+def sigma_word_batch1(x):
     # x:K,
     x9 = torch.gt(x,0.7).float()
     x8 = torch.gt(x,0.65).float()
@@ -453,6 +459,9 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     for s1 in s1_list:
         emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
         embs.append(np.expand_dims(emb1,axis=0))
+        if len(id2sen(s1))==0:
+            return np.array([0])
+
     emb1 = np.concatenate(embs,0) # K,8,300
     emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
@@ -608,6 +617,23 @@ def cut_from_point(input, sequence_length, ind,option, mode=0):
                 input_backward[i][j+1]=input[i][length-j]
             sequence_length_backward[i]=length-ind+1
     return input_forward.astype(np.int32), input_backward.astype(np.int32), sequence_length_forward.astype(np.int32), sequence_length_backward.astype(np.int32)
+
+def mask_at_point(input, sequence_length, ind,option, mode=0):
+    batch_size=input.shape[0]
+    num_steps=input.shape[1]
+
+    input_new = copy(input)
+    sequence_length_new = copy(sequence_length)
+    if mode==0:
+        input_new[:, ind+1] = option.dict_size+3
+    elif mode==1:
+        input_new[:, ind+1] = option.dict_size+3
+        for j in range(option.num_steps-ind-3):
+            input_new[:, ind+2+j] =  input_new[:, ind+3+j] 
+        sequence_length_new = sequence_length_new+1
+
+    return input_new.astype(np.int32),  sequence_length_new.astype(np.int32)
+
    
 def generate_candidate_input(input, sequence_length, ind, prob, search_size, option, mode=0):
     input_new=np.array([input[0]]*search_size)
@@ -658,6 +684,31 @@ def generate_candidate_input_batch(input, sequence_length, ind, prob, search_siz
     for i in range(search_size):
         input_new[:,i,ind+1]=ind_token[:,i]
     return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
+ 
+def generate_candidate_input_update(input, sequence_length, ind, prob, search_size, option, mode=0,\
+        calibrated_set=None):
+    # input, K,L; prob, K,vocab
+    input_new=np.array([[inp]*search_size for inp in input]) # K,100,L
+    sequence_length_new=np.array([[length]*search_size for length in sequence_length]) #K,100
+    if mode!=2:
+        ind_token=np.argsort(prob[:,: option.dict_size],1) #K,vocab
+        ind_token = ind_token[:,-search_size:] #K,100
+    
+    if mode==2:
+        for i in range(option.num_steps-ind-3):
+            input_new[:,: , ind+i+1]=input_new[:,: , ind+i+2]
+        sequence_length_new=sequence_length_new-1
+        return input_new, sequence_length_new
+    if mode==1:
+        tem_len = option.num_steps
+        for i in range(1, tem_len-ind):
+            input_new[:,:, tem_len-i]=input_new[: ,:,  tem_len-1-i]
+        sequence_length_new = np.minimum(sequence_length_new+1,tem_len)
+
+    for i in range(search_size):
+        input_new[:,i,ind+1]=ind_token[:,i]
+    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
+
 
 def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searching_size, option,\
         mode=0, calibrated_set = None):
@@ -713,15 +764,12 @@ def choose_an_action(c):
             c[i]=c[i]+c[i-1]
         if c[i]>=r:
             return i
-
-
+    return len(c)-1
 
 def sample_from_candidate(prob_candidate):
     return choose_action(normalize(prob_candidate))
 
-
 def samplep(probs):
-    N = probs.shape[1]
     M = probs.shape[0]
     samples = []
     for i in range(M):
