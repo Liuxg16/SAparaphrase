@@ -582,8 +582,8 @@ def output_p(sent, model):
     with torch.no_grad():
         sent = torch.tensor(sent, dtype=torch.long).cuda()
         output = model.predict(sent) # 1,15,300003
-        res = output.cpu().numpy()
-        return res
+        # res = output.cpu().numpy()
+        return output
 
 
 def simulatedAnnealing_batch(config, dataclass, forwardmodel, backwardmodel):
@@ -636,7 +636,6 @@ def simulatedAnnealing_batch(config, dataclass, forwardmodel, backwardmodel):
             appendtext(maxsens[i], option.save_path)
 
 def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, backwardmodel, option):
-    torch.no_grad()
     if option.mode == 'kw-bleu':
         similarityfun = similarity_keyword_bleu_tensor
     else:
@@ -655,7 +654,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
         ind=pos%(np.max(sequence_length-1))
         action=choose_action(option.action_prob)
         if action==0: 
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
+            prob_old = output_p(input, forwardmodel).cpu().numpy() #k,l,vocab
             prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
             input_ = [[x] for x in input]
             similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
@@ -667,14 +666,14 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
 
             prob_forward = output_p(input_forward, forwardmodel)[:, ind%(sequence_length[0]-1),:]#k,l,vocab
             prob_backward = output_p(input_backward, backwardmodel)[:, sequence_length[0]-1-ind%(sequence_length[0]-1),:]#k,l,vocab
-            prob_mul=(prob_forward*prob_backward) #K,vocab
+            prob_mul=(prob_forward*prob_backward).cpu().numpy() #K,vocab
             input_candidate, sequence_length_candidate=generate_candidate(input,\
                     sequence_length, ind, prob_mul, option.search_size, option, mode=action,\
                      calibrated_set=calibrated_set) # K,100,15
             input_candidate_flat = input_candidate.reshape(-1,option.num_steps)
             sequence_length_candidate_flat = sequence_length_candidate.reshape(-1)
 
-            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel)#k*100,l,vocab
+            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel).cpu().numpy() #k*100,l,vocab
             prob_candidate = getp(prob_candidate_pre,
                     input_candidate_flat,sequence_length_candidate_flat, option) # K*100
             
@@ -717,7 +716,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
 
             prob_forward = output_p(input_forward, forwardmodel)[:, ind%(sequence_length[0]-1),:]#k,l,vocab
             prob_backward = output_p(input_backward, backwardmodel)[:, sequence_length[0]-1-ind%(sequence_length[0]-1),:]#k,l,vocab
-            prob_mul=(prob_forward*prob_backward) #K,vocab
+            prob_mul=(prob_forward*prob_backward).cpu().numpy() #K,vocab
 
             input_candidate, sequence_length_candidate=generate_candidate(input,\
                     sequence_length, ind, prob_mul, option.search_size, option, mode=action,\
@@ -725,7 +724,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
             input_candidate_flat = input_candidate.reshape(-1,option.num_steps)
             sequence_length_candidate_flat = sequence_length_candidate.reshape(-1)
 
-            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel)#k*100,l,vocab
+            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel).cpu().numpy()#k*100,l,vocab
             prob_candidate = getp(prob_candidate_pre,
                     input_candidate_flat,sequence_length_candidate_flat, option) # K*100
             
@@ -742,7 +741,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
             prob_candidate_prob = prob_candidate_prob.squeeze().numpy() 
             V_new = np.log(np.maximum(np.power(prob_candidate_prob,1.0/(sequence_length+1)),1e-200))
 
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
+            prob_old = output_p(input, forwardmodel).cpu().numpy() #k,l,vocab
             prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
             input_ = [[x] for x in input]
             similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
@@ -765,7 +764,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
                     print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
 
         elif action==2: # word delete
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
+            prob_old = output_p(input, forwardmodel).cpu().numpy() #k,l,vocab
             prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
             input_ = [[x] for x in input]
             similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
@@ -777,7 +776,7 @@ def sa_batch(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, ba
                      calibrated_set=calibrated_set) # K,100,15
             input_candidate = input_candidate[:,0,:]
             sequence_length_candidate = sequence_length_candidate[:,0]
-            prob_new = output_p(input_candidate, forwardmodel) #k,l,vocab
+            prob_new = output_p(input_candidate, forwardmodel).cpu().numpy() #k,l,vocab
             prob_new = getp(prob_new, input_candidate,sequence_length_candidate, option) # K
 
             input_candidate = [[x] for x in input_candidate]
