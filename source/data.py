@@ -142,7 +142,7 @@ class dataset(object):
         self.length=len(input)
 
     def __call__(self, batch_size, step):
-        batch_num=self.length//batch_size
+        batch_num=self.length//batch_size+1
         step=step%batch_num
         return self.input[step*batch_size: (step+1)*batch_size], self.sequence_length[step*batch_size: (step+1)*batch_size], self.target[step*batch_size: (step+1)*batch_size]
 

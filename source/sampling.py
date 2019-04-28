@@ -646,7 +646,7 @@ def simulatedAnnealing_batch(config):
     for sen_id in range(use_data.length):
         print('====================')
         sta_vec=sta_vec_list[sen_id*batch_size:sen_id*batch_size+batch_size]
-        input, sequence_length, _=use_data(batch_size, sen_id)
+        input, sequence_length, _ = use_data(batch_size, sen_id)
         assert len(input)==len(sequence_length)
         N_input = len(input)
         for i in range(len(input)):
