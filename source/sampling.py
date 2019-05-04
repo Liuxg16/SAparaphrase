@@ -442,7 +442,6 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
 
             prob_candidate_norm=normalize(prob_candidate)
             prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
-            
             prob_candidate_prob=prob_candidate[prob_candidate_ind]
             
             V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length),1e-200))

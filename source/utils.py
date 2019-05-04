@@ -300,12 +300,12 @@ def sigma_word_bert(x):
     return x*x9+(x-0.8)*9*x8
 
 def sigma_bleu(x):
-    #if x>0.8:
-    #    return  1-x+0.01 # 0.2-0
-    #elif x>0.4:
-    #    return 1-(x-0.4)*2 # 0.2-1
-    #else:
-    #    return 1
+    # if x>0.8:
+    #     return  1-x+0.01 # 0.2-0
+    # elif x>0.4:
+    #     return 1-(x-0.4)*2 # 0.2-1
+    # else:
+    #     return 1
     return 1-x+0.01
 
 def sigmoid(x):
@@ -463,9 +463,9 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
         if len(id2sen(s1))==0:
             return np.array([0])
     emb1 = np.concatenate(embs,0) # K,8,300
-    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
+    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1)
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
-    emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
+    emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1)
     # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
     wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
     emb_mat = torch.bmm(emb2,emb1) # K,8,7
@@ -485,7 +485,7 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
         bleu_score = sigma_bleu(bleu_score)
         bleus.append(bleu_score)
 
-    res = sim.cpu().numpy()*np.array(bleus)
+    res = sim.numpy()*np.array(bleus)
     return res
 
 
