@@ -46,7 +46,10 @@ def evaluate_bleu(reference_path, generated_path):
             generated_word_lists.append(line.strip().lower().split())
 
     bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
-    print('bleu scores:', bleu_scores)
+    sumss = 0
+    for s in bleu_scores:
+        sumss += 0.25*bleu_scores[s]
+    print('bleu scores:', sumss, bleu_scores)
 
 def evaluate_semantic(reference_path, generated_path):
     actual_word_lists = []
