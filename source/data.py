@@ -9,7 +9,7 @@ import torch
 class Dicts(object):
     def __init__(self, dict_path):
         f = open(dict_path,'rb')
-        self.Dict1, self.Dict2=pkl.load(f, encoding = 'latin1')
+        self.Dict1, self.Dict2=pkl.load(f)
         f.close()
         self.vocab_size=len(self.Dict1)+3
         self.UNK=self.vocab_size-3

@@ -629,7 +629,7 @@ def simulatedAnnealing_batch(config):
     tfflag = True
 
     fileobj = open(option.emb_path,'r')
-    emb_word,emb_id=pkl.load(StrToBytes(fileobj), encoding='latin1')
+    emb_word,emb_id=pkl.load(StrToBytes(fileobj))
     fileobj.close()
     sim=option.sim
     sta_vec=list(np.zeros([option.num_steps-1]))

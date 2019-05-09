@@ -18,6 +18,8 @@ python3 source/run.py --data_path data/input/input.txt --use_data_path data/inpu
 
 # basic sa batch
 python3 source/run.py --data_path data/input/input.txt --use_data_path data/input/test.txt --mode kw --save_path temp.txt  --N_repeat 1  --save_path temp.txt  --batch_size 3 --gpu 2
+#coco
+python source/run.py --data_path data/input/input.txt --use_data_path data/cocodata/test_source.txt  --mode kw-bleu  --N_repeat 1  --save_path sa-coco-searchsize50.txt --search_size 50  --batch_size 6  --gpu 0  --forward_save_path data/cocomodel/forward.ckpt --backward_save_path data/cocomodel/backward.ckpt --dict_path data/cocodata/dict.pkl  --emb_path data/cocodata/emb.pkl
 
 # evaluate
 python3 source/evaluate.py --reference_path data/quora/test.txt  --generated_path sa-keyword.txt
