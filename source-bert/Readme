@@ -1,0 +1,15 @@
+# data
+quora:https://www.kaggle.com/c/quora-question-pairs/data
+# training
+# forward
+python3 source-py/run.py --exps_dir exps --exp_name forward --gpu 3 --hidden_size 300 --batch_size 512 --dropout 0.2 --data_path data/quora-all.txt
+## backward
+python3 source-py/run.py --exps_dir exps --exp_name forward --gpu 3 --hidden_size 300 --batch_size 512 --dropout 0.2 --data_path data/quora-all.txt --backward
+## predicting
+python3 source-py/run.py --exps_dir exps --exp_name predicting --gpu 1 --hidden_size 300 --batch_size 512 --dropout 0.2 --data_path data/quora-all.txt  --model 1 
+
+# sampling
+## origin
+python3 source-py/run.py --exps_dir exps --exp_name test  --gpu 1  --hidden_size 300  --dropout 0.2 --data_path data/quora/test.txt --no_train --mode kw-bleu  --forward_path exps/forward/ckpt/model-best.pkl  --backward_path exps/backward/ckpt/model-best.pkl --batch_size 10  --use_data_path data/test.txt --save_path sa.txt 
+## new
+python3 source-py/run.py --exps_dir exps --exp_name test --gpu 0 --hidden_size 300 --dropout 0.2 --data_path data/quora/test.txt --no_train --mode kw-bleu --forward_path exps/forward/ckpt/model-best.pkl --backward_path exps/predicting/ckpt/model-best.pkl --batch_size 2 --use_data_path testfortem.txt --save_path temp.txt  --N_repeat 1 --mcmc predicting
