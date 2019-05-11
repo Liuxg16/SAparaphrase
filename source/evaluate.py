@@ -90,7 +90,6 @@ def evaluate_rouge(reference_path, generated_path):
         for line in f:
             generated_word_lists.append(line.strip().lower())
     actual_word_lists = actual_word_lists[:len(generated_word_lists)]
-
     rouge = Rouge()
     scores = rouge.get_scores(generated_word_lists, actual_word_lists, avg=True)
     print scores

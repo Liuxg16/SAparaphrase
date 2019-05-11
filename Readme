@@ -22,4 +22,9 @@ python3 source/run.py --data_path data/input/input.txt --use_data_path data/inpu
 python source/run.py --data_path data/input/input.txt --use_data_path data/cocodata/test_source.txt  --mode kw-bleu  --N_repeat 1  --save_path sa-coco-searchsize50.txt --search_size 50  --batch_size 6  --gpu 0  --forward_save_path data/cocomodel/forward.ckpt --backward_save_path data/cocomodel/backward.ckpt --dict_path data/cocodata/dict.pkl  --emb_path data/cocodata/emb.pkl
 
 # evaluate
+## links
+### https://github.com/Maluuba/nlg-eval
 python3 source/evaluate.py --reference_path data/quora/test.txt  --generated_path sa-keyword.txt
+python source/evaluate.py --reference_path data/cocodata/refer_8479-.txt  --generated_path sa-coco-searchsize50-8479-.txt --mode rouge
+
+nlg-eval --hypothesis=tem.txt --references=sa-coco-searchsize50-8479-.txt
