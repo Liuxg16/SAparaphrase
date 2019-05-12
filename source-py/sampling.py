@@ -583,6 +583,7 @@ def output_p(sent, model):
         sent = torch.tensor(sent, dtype=torch.long).cuda()
         output = model.predict(sent) # 1,15,300003
         # res = output.cpu().numpy()
+        return output
         return output.cpu().numpy()
 
 

@@ -6,6 +6,7 @@ from utils import Option
 from models import RNNModel, PredictingModel
 from experiment import Experiment
 from sampling import simulatedAnnealing_batch
+from bertinterface import BertMaskedLM
 
 def main():
 
@@ -125,20 +126,13 @@ def main():
         experiment.train()
     else: 
        	forwardmodel = RNNModel(option).cuda()
-        if option.mcmc=='predicting':
-            backwardmodel = PredictingModel(option).cuda()
-        else:
-            backwardmodel = RNNModel(option).cuda()
         if option.forward_path is  not None: 
             with open(option.forward_path, 'rb') as f:
                 forwardmodel.load_state_dict(torch.load(f))
 
-        if option.backward_path is  not None: 
-            with open(option.backward_path, 'rb') as f:
-                backwardmodel.load_state_dict(torch.load(f))
         forwardmodel.eval()
-        backwardmodel.eval()
-        simulatedAnnealing_batch(option, dataclass, forwardmodel, backwardmodel)
+        predictmodel = BertMaskedLM()
+        simulatedAnnealing_batch(option, dataclass, forwardmodel, predictmodel)
 
 
     print("="*36 + "Finish" + "="*36)

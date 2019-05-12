@@ -359,9 +359,6 @@ class BertMaskedLM():
         sents = '[CLS] '+' '.join(sents_l)+ ' [SEP]'
         tokenized_text = self.tokenizer.tokenize(sents)
         masked_index_shift = tokenized_text.index(self.mask_token)
-        # Mask a token that we will try to predict back with `BertForMaskedLM`
-        print(tokenized_text)
-        #assert tokenized_text == ['[CLS]', 'who', 'was', 'jim', 'henson', '?', '[SEP]', 'jim', '[MASK]', 'was', 'a', 'puppet', '##eer', '[SEP]']
 
         # Convert token to vocabulary indices
         indexed_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)

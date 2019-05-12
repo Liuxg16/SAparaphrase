@@ -154,7 +154,7 @@ def appendtext(text, file_name):
 def keyword_pos2sta_vec(option,keyword, pos):
     key_ind=[]
     # pos=pos[:option.num_steps-1]
-    pos=pos[:option.num_steps-1]
+    pos=pos[:option.num_steps]
     for i in range(len(pos)):
         if pos[i]=='NNP':
             key_ind.append(i)
@@ -179,6 +179,49 @@ def keyword_pos2sta_vec(option,keyword, pos):
     return sta_vec
 
 def read_data_use(option,  sen2id):
+
+    file_name = option.use_data_path
+    max_length = option.num_steps
+    dict_size = option.dict_size
+    Rake = RAKE.Rake(RAKE.SmartStopList())
+    z=ZPar(option.pos_path)
+    tagger = z.get_tagger()
+    with open(file_name) as f:
+        data=[]
+        rawdata = []
+        vector=[]
+        sta_vec_list=[]
+        j=0
+        for line in f:
+            sta_vec=list(np.zeros([option.num_steps]))
+            keyword=Rake.run(line.strip())
+            pos_list=tagger.tag_sentence(line.strip()).split()
+            # pos=zip(*[x.split('/') for x in pos_list])[0]
+            pos=list(zip(*[x.split('/') for x in pos_list]))[0]
+            if keyword!=[]:
+                keyword=list(list(zip(*keyword))[0])
+                keyword_new=[]
+                linewords = line.strip().split()
+                for i in range(len(linewords)):
+                    for item in keyword:
+                        length11 = len(item.split())
+                        if ' '.join(linewords[i:i+length11])==item:
+                            keyword_new.extend([i+k for k in range(length11)])
+                for i in range(len(keyword_new)):
+                    ind=keyword_new[i]
+                    if ind<=option.num_steps-1:
+                        sta_vec[ind]=1
+            if option.keyword_pos==True:
+                sta_vec_list.append(keyword_pos2sta_vec(option,sta_vec,pos))
+            else:
+                sta_vec_list.append(list(np.zeros([option.num_steps])))
+            x = line.strip().lower().split()[:option.num_steps]
+            rawdata.append(' '.join(x))
+            data.append(sen2id(line.strip().lower().split()))
+    data_new=array_data(data, max_length, dict_size)
+    return data_new, sta_vec_list, rawdata # sentence, keyvector
+
+def read_data_use1(option,  sen2id):
 
     file_name = option.use_data_path
     max_length = option.num_steps
@@ -214,48 +257,6 @@ def read_data_use(option,  sen2id):
                 sta_vec_list.append(keyword_pos2sta_vec(option,sta_vec,pos))
             else:
                 sta_vec_list.append(list(np.zeros([option.num_steps-1])))
-            data.append(sen2id(line.strip().lower().split()))
-    data_new=array_data(data, max_length, dict_size)
-    return data_new, sta_vec_list # sentence, keyvector
-
-def read_data_use1(option,  sen2id):
-
-    file_name = option.use_data_path
-    max_length = option.num_steps
-    dict_size = option.dict_size
-    Rake = RAKE.Rake(RAKE.SmartStopList())
-    z=ZPar(option.pos_path)
-    tagger = z.get_tagger()
-    with open(file_name) as f:
-        data=[]
-        vector=[]
-        sta_vec_list=[]
-        j=0
-        for line in f:
-            print('sentence:'+line)
-            sta_vec=list(np.zeros([option.num_steps-1]))
-            keyword=Rake.run(line.strip())
-            pos_list=tagger.tag_sentence(line.strip()).split()
-            # pos=zip(*[x.split('/') for x in pos_list])[0]
-            pos=list(zip(*[x.split('/') for x in pos_list]))[0]
-            print(keyword)
-            if keyword!=[]:
-                keyword=list(list(zip(*keyword))[0])
-                keyword_new=[]
-                for item in keyword:
-                    tem1=[line.strip().split().index(x) for x in item.split() if x in line.strip().split()]
-                    print('id',tem1)
-                    keyword_new.extend(tem1)
-                print(keyword_new)
-                for i in range(len(keyword_new)):
-                    ind=keyword_new[i]
-                    if ind<=option.num_steps-2:
-                        sta_vec[ind]=1
-            if option.keyword_pos==True:
-                sta_vec_list.append(keyword_pos2sta_vec(option,sta_vec,pos))
-            else:
-                sta_vec_list.append(list(np.zeros([option.num_steps-1])))
-            print(keyword_pos2sta_vec(option,sta_vec, pos))        
             data.append(sen2id(line.strip().lower().split()))
     data_new=array_data(data, max_length, dict_size)
     return data_new, sta_vec_list # sentence, keyvector
@@ -322,6 +323,15 @@ def sen2mat(s, id2sen, emb_word, option):
         if item==option.dict_size+1:
             break
         word=id2sen([item])[0]
+        if  word in emb_word:
+            mat.append(np.array(emb_word[word]))
+        else:
+            mat.append(np.random.random([option.hidden_size]))
+    return np.array(mat)
+
+def senword2mat(s, id2sen, emb_word, option):
+    mat=[]
+    for word in s:
         if  word in emb_word:
             mat.append(np.array(emb_word[word]))
         else:
@@ -460,15 +470,21 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     sims=  []
     embs = []
     bleus = []
+    s2_ = s2.split()
     for s1 in s1_list:
-        emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
+        s1_ = s1.split()
+        emb1=senword2mat(s1_, id2sen, emb_word, option) # M*K
         embs.append(np.expand_dims(emb1,axis=0))
-        if len(id2sen(s1))==0:
-            return np.array([0])
+        actual_word_lists = [[s2_]]
+        generated_word_lists = [s1_]
+        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
+        bleu_score = sigma_bleu(bleu_score)
+        bleus.append(bleu_score)
+        #print(s1_,s2_, bleu_score)
 
     emb1 = np.concatenate(embs,0) # K,8,300
     emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
-    emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+    emb2= senword2mat(s2_, id2sen, emb_word, option) # N*k
     emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
     # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
     wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
@@ -482,16 +498,8 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     sim,_ = torch.min(sim_vec[:,wei2],1)
     sim = sigma_word_batch(sim)
 
-    for s1 in s1_list:
-        actual_word_lists = [[id2sen(s2)]]
-        generated_word_lists = [id2sen(s1)]
-        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
-        bleu_score = sigma_bleu(bleu_score)
-        bleus.append(bleu_score)
-
     res = sim.cpu().numpy()*np.array(bleus)
     return res
-
 
 def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
@@ -639,109 +647,31 @@ def mask_at_point(input, sequence_length, ind,option, mode=0):
         input_new[:, ind+1] = option.dict_size+3
     return input_new.astype(np.int32),  sequence_length_new.astype(np.int32)
 
-   
-def generate_candidate_input(input, sequence_length, ind, prob, search_size, option, mode=0):
-    input_new=np.array([input[0]]*search_size)
-    sequence_length_new=np.array([sequence_length[0]]*search_size)
-    length=sequence_length[0]-1
-    if mode!=2:
-        ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
-    
-    if mode==2:
-        for i in range(sequence_length[0]-ind-2):
-            input_new[: , ind+i+1]=input_new[: , ind+i+2]
-        for i in range(sequence_length[0]-1, option.num_steps-1):
-            input_new[: , i]=input_new[: , i]*0+option.dict_size+1
-        sequence_length_new=sequence_length_new-1
-        return input_new[:1], sequence_length_new[:1]
-    if mode==1:
-        for i in range(0, sequence_length_new[0]-1-ind):
-            input_new[: , sequence_length_new[0]-i]=input_new[: ,  sequence_length_new[0]-1-i]
-        sequence_length_new=sequence_length_new+1
-    for i in range(search_size):
-        input_new[i][ind+1]=ind_token[i]
-    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
-  
-def generate_candidate_input_batch(input, sequence_length, ind, prob, search_size, option, mode=0,\
-        calibrated_set=None):
-    # input, K,L; prob, K,vocab
-    input_new=np.array([[inp]*search_size for inp in input]) # K,100,L
-    sequence_length_new=np.array([[length]*search_size for length in sequence_length]) #K,100
-    if mode!=2:
-        ind_token=np.argsort(prob[:,: option.dict_size],1) #K,vocab
-        ind_token = ind_token[:,-search_size:] #K,100
-    
-    if mode==2:
-        for k in range(len(input)):
-            for i in range(sequence_length[k]-ind-2):
-                input_new[k,: , ind+i+1]=input_new[k,: , ind+i+2]
-            for i in range(sequence_length[k]-1, option.num_steps-1):
-                input_new[k,: , i]=input_new[k,:, i]*0+option.dict_size+1
-        sequence_length_new=sequence_length_new-1
-        return input_new, sequence_length_new
-    if mode==1:
-        for k in range(len(input)):
-            tem_len = min(sequence_length[k],14) # avoid overflow
-            for i in range(0, tem_len-1-ind):
-                input_new[k ,:, tem_len-i]=input_new[k ,:,  tem_len-1-i]
-            sequence_length_new[k,:]= np.minimum(sequence_length_new[k,:]+1,15)
+def predictwords(sentid_list, sequence_length, index, id2sen, sen2id, model, option, mode=0):
+    gen_sent_list = []
+    sent = sentid_list[0]
+    if mode ==2:
+        sent = sent.split()
+        sent.pop(index)
+        sent = ' '.join(sent)
+        gen_sent_list.append(sent)
+        return gen_sent_list, sequence_length-1
 
-    for i in range(search_size):
-        input_new[:,i,ind+1]=ind_token[:,i]
-    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
- 
-def generate_candidate_input_update(input, sequence_length, ind, prob, search_size, option, mode=0,\
-        calibrated_set=None):
-    # input, K,L; prob, K,vocab
-    input_new=np.array([[inp]*search_size for inp in input]) # K,100,L
-    sequence_length_new=np.array([[length]*search_size for length in sequence_length]) #K,100
-    if mode!=2:
-        ind_token=np.argsort(prob[:,: option.dict_size],1) #K,vocab
-        ind_token = ind_token[:,-search_size:] #K,100
-    
-    if mode==2:
-        for i in range(option.num_steps-ind-2):
-            input_new[:,: , ind+i+1]=input_new[:,: , ind+i+2]
-        input_new[:,: , -1]= option.dict_size+1
-        sequence_length_new=sequence_length_new-1
-        return input_new, sequence_length_new
+    sent_split = sent.strip().split()
     if mode==1:
-        tem_len = option.num_steps
-        for i in range(1, tem_len-ind-1):
-            input_new[:,:, tem_len-i]=input_new[: ,:,  tem_len-1-i]
-        sequence_length_new = np.minimum(sequence_length_new+1,tem_len)
+        index_ = index+1
+        sent_split.insert(index_, '[MASK]')
+        sent = ' '.join(sent_split)
+        sequence_length_feed = sequence_length+1
+    elif mode==0:
+        index_ = index
+        sequence_length_feed = sequence_length+0
 
-    input_new[:,:,ind+1]=ind_token[:,:]
-    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
-
-def generate_candidate_input_calibrated(input, sequence_length, ind, prob, searching_size, option,\
-        mode=0, calibrated_set = None):
-    search_size = searching_size
-    if mode!=2:
-        if calibrated_set is None:
-            ind_token=np.argsort(prob[: option.dict_size])[-search_size:]
-        else:
-            search_size = searching_size+len(calibrated_set)
-            ind_token=np.argsort(prob[: option.dict_size])[-searching_size:]
-            ind_token = np.concatenate([ind_token,np.array(calibrated_set)],0)
-
-    input_new=np.array([input[0]]*search_size)
-    sequence_length_new=np.array([sequence_length[0]]*search_size)
-    length=sequence_length[0]-1
-    if mode==2:
-        for i in range(sequence_length[0]-ind-2):
-            input_new[: , ind+i+1]=input_new[: , ind+i+2]
-        for i in range(sequence_length[0]-1, option.num_steps):
-            input_new[: , i]=input_new[: , i]*0+option.dict_size+1
-        sequence_length_new=sequence_length_new-1
-        return input_new[:1], sequence_length_new[:1]
-    if mode==1:
-        for i in range(0, sequence_length_new[0]-1-ind):
-            input_new[: , sequence_length_new[0]-i]=input_new[: ,  sequence_length_new[0]-1-i]
-        sequence_length_new=sequence_length_new+1
-    for i in range(search_size):
-        input_new[i][ind+1]=ind_token[i]
-    return input_new.astype(np.int32), sequence_length_new.astype(np.int32)
+    word_candidates = model.predictwords(sent, index_, option.search_size)
+    sent_ids = np.array([sent_split]*option.search_size)
+    sent_ids[:,index_] = word_candidates
+    gen_sent_list.append([' '.join(list(x)) for x in sent_ids])
+    return gen_sent_list[0], sequence_length_feed
 
 def normalize(x, e=0.05):
     tem = copy(x)
@@ -807,7 +737,6 @@ def getp(probabilities,input, lengths, option):
         tems.append(tem)
     return tems
 
-
 def getppl(probabilities,input, lengths, option):
     tems = []
     for probs,inp, length in zip(probabilities,input,lengths):
@@ -826,10 +755,6 @@ class StrToBytes:
         return self.fileobj.read(size).encode()
     def readline(self, size=-1):
         return self.fileobj.readline(size).encode()
-
-
-
-
 
 class Option(object):
     def __init__(self, d):
