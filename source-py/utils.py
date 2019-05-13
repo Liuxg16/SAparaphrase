@@ -827,6 +827,24 @@ class StrToBytes:
     def readline(self, size=-1):
         return self.fileobj.readline(size).encode()
 
+def read_word2vec(filename = None):
+    try:
+        f = open(filename)
+    except: 
+        f = open('data/glove.840B.300d.txt')
+    
+    lines = f.readlines()
+    print('00000000000000000000')
+    print(len(lines))
+    vocab_vec = dict() # word2id
+    for id in range(len(lines)):
+        print(id)
+        elems = lines[id].split(' ')
+        vocab_vec[elems[0]] = [float(elem) for elem in elems[1:]]
+
+    f.close()
+    del lines
+    return vocab_vec
 
 
 

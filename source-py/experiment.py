@@ -5,7 +5,7 @@ import pickle
 from collections import Counter
 import numpy as np
 import torch
-import torch
+import utils
 import torch.nn as nn
 
 class Experiment():
@@ -30,6 +30,7 @@ class Experiment():
         self.option = option
         self.learner = learner
         self.data = data
+        self.vocab = self.data.vocab
         # helpers
         self.msg_with_time = lambda msg: \
                 "%s Time elapsed %0.2f hrs (%0.1f mins)" \
@@ -64,12 +65,39 @@ class Experiment():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() and not option.no_cuda else "cpu")
 
+
+    def init_embedding(self, filename):
+        try: 
+            with open(filename, 'rb') as f: 
+                embedding = pickle.load(f)
+                self.learner.encoder.weight.data = embedding.cuda()
+        except:
+            vocab_vec = utils.read_word2vec(filename)
+            idx2word = dict((word,idx) for idx,word in self.vocab.items())
+            for id in idx2word.keys():
+                key = idx2word[id]
+                print(key)
+                if key in vocab_vec:
+                    self.learner.encoder.weight.data[id,:] = torch.cuda.FloatTensor(vocab_vec[key])
+                else:
+                    self.learner.encoder.weight.data[id,:] = \
+                    torch.from_numpy(np.random.uniform(-0.01, 0.01, 300).astype("float32")).float().cuda()
+
+            with open('embedding_layer.pkl', 'wb') as f:
+                pickle.dump(self.learner.encoder.weight.data.cpu(),f)
+            # with open(vocab_path, 'wb') as f:
+            #     pickle.dump(vocab,f)
+            print(vocab_vec.keys())
+            del vocab_vec
+
+
     def one_epoch(self, mode, num_batch, next_fn):
         num_batch = int(num_batch)
         epoch_loss = [0]
         epoch_in_top = [0]
         self.optimizer.zero_grad()
         for batch in range(num_batch):
+            print(batch)
             data, lengths, target= next_fn() # query(relation), head(target), tails
             data = data.to(self.device)
             target = target.to(self.device)

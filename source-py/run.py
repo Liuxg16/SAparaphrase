@@ -28,7 +28,7 @@ def main():
     # model architecture
     parser.add_argument('--num_steps', default=15, type=int)
     parser.add_argument('--num_layers', default=2, type=int)
-    parser.add_argument('--emb_size', default=256, type=int)
+    parser.add_argument('--emb_size', default=300, type=int)
     parser.add_argument('--hidden_size', default=300, type=int)
     parser.add_argument('--dropout', default=0.0, type=float)
     parser.add_argument('--model', default=0, type=int)
@@ -39,7 +39,7 @@ def main():
     parser.add_argument('--weight_decay', default=0.00, type=float)
     parser.add_argument('--clip_norm', default=5, type=float)
     parser.add_argument('--no_cuda', default=False, action="store_true")
-    parser.add_argument('--local', default=False, action="store_true")
+    parser.add_argument('--pretrain', default=False, action="store_true")
     parser.add_argument('--threshold', default=0.1, type=float)
 
     # evaluation
@@ -80,7 +80,6 @@ def main():
     torch.manual_seed(option.seed)
     os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
 
-
     if option.exp_name is None:
       option.tag = time.strftime("%y-%m-%d-%H-%M")
     else:
@@ -88,7 +87,6 @@ def main():
     if option.accuracy:
       assert option.top_k == 1
     
-
     dataclass = data.Data(option)       
     print("Data prepared.")
 
@@ -113,11 +111,14 @@ def main():
 
 
     learner.to(device)
+
     if option.load is  not None: 
         with open(option.load, 'rb') as f:
             learner.load_state_dict(torch.load(f))
 
     experiment = Experiment(option, learner=learner, data=dataclass)
+    if option.pretrain:
+        experiment.init_embedding(option.emb_path)
     print("Experiment created.")
 
     if not option.no_train:

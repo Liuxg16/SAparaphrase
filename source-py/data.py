@@ -54,6 +54,11 @@ class Data(object):
     def __init__(self, option):
         self.option = option
         dict_use = Dicts(option.dict_path)
+        self.vocab = dict_use.Dict1
+        self.vocab['UNK'] = dict_use.UNK
+        self.vocab['BOS'] = dict_use.BOS
+        self.vocab['EOS'] = dict_use.EOS
+
         self.sen2id=dict_use.sen2id
         self.id2sen=dict_use.id2sen
         self.train_data, self.valid_data, self.test_data = self.read_data(self.option.data_path,\
