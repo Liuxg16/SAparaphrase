@@ -838,7 +838,6 @@ def read_word2vec(filename = None):
     print(len(lines))
     vocab_vec = dict() # word2id
     for id in range(len(lines)):
-        print(id)
         elems = lines[id].split(' ')
         vocab_vec[elems[0]] = [float(elem) for elem in elems[1:]]
 

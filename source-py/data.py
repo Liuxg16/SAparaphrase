@@ -1,7 +1,7 @@
 import numpy as np 
 import pickle as pkl
 import os, random
-import copy
+from copy import copy
 from math import ceil
 from collections import Counter
 import torch
@@ -54,7 +54,7 @@ class Data(object):
     def __init__(self, option):
         self.option = option
         dict_use = Dicts(option.dict_path)
-        self.vocab = dict_use.Dict1
+        self.vocab = copy(dict_use.Dict1)
         self.vocab['UNK'] = dict_use.UNK
         self.vocab['BOS'] = dict_use.BOS
         self.vocab['EOS'] = dict_use.EOS

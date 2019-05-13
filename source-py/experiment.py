@@ -76,18 +76,19 @@ class Experiment():
             idx2word = dict((word,idx) for idx,word in self.vocab.items())
             for id in idx2word.keys():
                 key = idx2word[id]
-                print(key)
                 if key in vocab_vec:
-                    self.learner.encoder.weight.data[id,:] = torch.cuda.FloatTensor(vocab_vec[key])
+                    self.learner.encoder.weight.data[id,:] = torch.tensor(vocab_vec[key],dtype=torch.float).cuda()
                 else:
+                    print(key)
                     self.learner.encoder.weight.data[id,:] = \
                     torch.from_numpy(np.random.uniform(-0.01, 0.01, 300).astype("float32")).float().cuda()
 
-            with open('embedding_layer.pkl', 'wb') as f:
+
+            embfile = os.path.join(self.option.this_expsdir,'embedding_layer.pkl')
+            with open(embfile, 'wb') as f:
                 pickle.dump(self.learner.encoder.weight.data.cpu(),f)
             # with open(vocab_path, 'wb') as f:
             #     pickle.dump(vocab,f)
-            print(vocab_vec.keys())
             del vocab_vec
 
 
@@ -97,7 +98,6 @@ class Experiment():
         epoch_in_top = [0]
         self.optimizer.zero_grad()
         for batch in range(num_batch):
-            print(batch)
             data, lengths, target= next_fn() # query(relation), head(target), tails
             data = data.to(self.device)
             target = target.to(self.device)

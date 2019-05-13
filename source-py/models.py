@@ -13,6 +13,7 @@ class RNNModel(nn.Module):
 		self.option = option
 		dropout = option.dropout
 		ntoken = option.vocab_size
+		self.vocab_size = option.vocab_size
 		ninp = option.emb_size
 		nhid = option.hidden_size
 		self.nlayers = option.num_layers
@@ -40,7 +41,6 @@ class RNNModel(nn.Module):
 		batch_size = input.size(0)
 		length = input.size(1)
 		target = target.view(-1)
-
 		emb = self.drop(self.encoder(input))
 		c0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
 		h0 = torch.zeros(self.nlayers, batch_size, self.nhid).to(self.device)
