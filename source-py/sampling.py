@@ -586,11 +586,10 @@ def output_p(sent, model):
         return output
         return output.cpu().numpy()
 
-
 def simulatedAnnealing_batch(config, dataclass, forwardmodel, backwardmodel):
     option = config
     if option.mcmc=='sa': 
-        mcmcfun = sa_batch
+        mcmcfun = sa_single
     elif option.mcmc == 'predicting':
         mcmcfun = sa_predicting 
 
@@ -970,167 +969,217 @@ def sa_predicting(input, sequence_length, sta_vec, id2sen, emb_word, forwardmode
         pos += 1
     return input,V_old
 
-def sa_predicting1(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, predictingmodel, option):
+def sa_single(input, sequence_length, sta_vec, id2sen, emb_word, forwardmodel, backwardmodel, option):
     if option.mode == 'kw-bleu':
-        similarityfun = similarity_keyword_bleu_tensor
+        similarity = similarity_keyword_bleu
     else:
-        similarityfun= similarity_keyword_tensor
-    sim = similarityfun
+        similarity = similarity_keyword
+    sim = similarity
     similaritymodel = None
-
-    generate_candidate = generate_candidate_input_update
     pos=0
-    input_original= copy(input)
+    input_original=input[0]
     sta_vec_original = [x for x in sta_vec]
-    calibrated_set =[ [x for x in inp] for inp in input]
-    N_input = len(input)
+    calibrated_set = [x for x in input[0] if x< option.dict_size]
     for iter in range(option.sample_time):
         temperature = option.temperatures[iter]
-        ind=pos%(np.max(sequence_length-1))
+        ind=pos%(sequence_length[0]-1)
         action=choose_action(option.action_prob)
-        if action==0: 
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
-            prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
-            input_ = [[x] for x in input]
-            similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
-                      option, similarityfun, similaritymodel) #K,
-            prob_old_prob = prob_old_prob*similarity_old #K,
-            input_new, input_sequence_length_new =\
-                    mask_at_point(input, sequence_length, ind, option, mode=action)
-            prob_mul = output_p(input_new, predictingmodel)#k,vocab
-            input_candidate, sequence_length_candidate=generate_candidate(input,\
+        calibrated_set = list(set(calibrated_set))
+        if action==0: # word replacement (action: 0)
+            prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                        mode='use')[0]
+            tem=1
+            for j in range(sequence_length[0]-1):
+                tem*=prob_old[j][input[0][j+1]]
+            tem*=prob_old[j+1][option.dict_size+1]
+            prob_old_prob=tem
+            if sim!=None:
+                similarity_old=similarity(input, input_original, sta_vec, id2sen, emb_word,
+                      option, similaritymodel)[0]
+                prob_old_prob*=similarity_old
+            else:
+                similarity_old=-1
+            input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                    cut_from_point(input, sequence_length, ind, option, mode=action)
+            prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+            prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+            prob_mul=(prob_forward*prob_backward)
+            input_candidate, sequence_length_candidate=generate_candidate_input_calibrated(input,\
                     sequence_length, ind, prob_mul, option.search_size, option, mode=action,\
-                     calibrated_set=calibrated_set) # K,100,15
-            input_candidate_flat = input_candidate.reshape(-1,option.num_steps)
-            sequence_length_candidate_flat = sequence_length_candidate.reshape(-1)
+                     calibrated_set=calibrated_set)
 
-            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel)#k*100,l,vocab
-            prob_candidate = getp(prob_candidate_pre,
-                    input_candidate_flat,sequence_length_candidate_flat, option) # K*100
+            prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                        sequence_length_candidate,mode='use')
+            prob_candidate=[]
+            for i in range(len(input_candidate)):
+              tem=1
+              for j in range(sequence_length[0]-1):
+                tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+              tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+              prob_candidate.append(tem)
+      
+            prob_candidate=np.array(prob_candidate)
+            if sim!=None:
+                similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                        id2sen, emb_word, option, similaritymodel)
+                prob_candidate=prob_candidate*similarity_candidate
+
+            prob_candidate_norm=normalize(prob_candidate)
+            prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+            prob_candidate_prob=prob_candidate[prob_candidate_ind]
             
-            prob_candidate = np.array(prob_candidate).reshape(N_input,-1) # K,100
-            similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
-                        id2sen, emb_word, option ,similarityfun, similaritymodel) #  K,100
-            similarity_candidate =similarity_candidate.reshape(N_input,-1)
-            prob_candidate=prob_candidate*similarity_candidate # K,100
-
-            # sampling
-            prob_candidate_norm=\
-                prob_candidate/(np.maximum(prob_candidate.sum(1,keepdims=True),1e-50))
-            prob_candidate_ind=samplep(prob_candidate_norm)
-            id_sample = torch.tensor(prob_candidate_ind,dtype=torch.long).view(N_input,1)
-            prob_candidate_prob= torch.gather(torch.tensor(prob_candidate,dtype=torch.float),1,id_sample) # 5,1
-            print('gather')
-            prob_candidate_prob = prob_candidate_prob.squeeze().numpy() 
-            V_new = np.log(np.maximum(np.power(prob_candidate_prob,1.0/sequence_length),1e-200))
-            V_old = np.log(np.maximum(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
-
-            alphat = np.minimum(1,np.exp(np.minimum((V_new-V_old)/temperature,100)))
-            for i,inp in enumerate(input):                
-                if ind>=sequence_length[i]-1:
-                    continue
-                alpha = alphat[i]
-                chooseind = prob_candidate_ind[i]
-                if choose_action([alpha, 1-alpha])==0:
-                    input1=input_candidate[i][chooseind]
-                    if np.sum(input1)==np.sum(inp):
-                        pass
-                    else:
-                        input[i] = input1
-                        print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
-                        print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+            V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length),1e-200))
+            V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
+            alphat = min(1,math.exp(min((V_new-V_old)/temperature,100)))
+            
+            if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
+                input1=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                if np.sum(input1[0])==np.sum(input[0]):
+                    pass
+                else:
+                    if input[0][ind+1]<option.dict_size:
+                        calibrated_set.append(input[0][ind+1])
+                    input= input1
+                    print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
+                                    V_new,alphat,similarity_old,similarity_candidate[prob_candidate_ind])
+                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
 
         elif action==1: # word insert
-            input_new, input_sequence_length_new =\
-                    mask_at_point(input, sequence_length, ind, option, mode=action)
-            prob_mul = output_p(input_new, predictingmodel)#k,vocab
-            input_candidate, sequence_length_candidate=generate_candidate(input,\
+            if sequence_length[0]>=option.num_steps:
+                pos += 1
+                continue
+                # break
+
+            input_forward, input_backward, sequence_length_forward, sequence_length_backward =\
+                    cut_from_point(input, sequence_length, ind, option, mode=action)
+
+            prob_forward=run_epoch(session, mtest_forward, input_forward, sequence_length_forward, mode='use')[0, ind%(sequence_length[0]-1),:]
+            prob_backward=run_epoch(session, mtest_backward, input_backward, sequence_length_backward, mode='use')[0, sequence_length[0]-1-ind%(sequence_length[0]-1),:]
+
+            prob_mul=(prob_forward*prob_backward)
+
+            input_candidate, sequence_length_candidate=generate_candidate_input_calibrated(input,\
                     sequence_length, ind, prob_mul, option.search_size, option, mode=action,\
-                     calibrated_set=calibrated_set) # K,100,15
+                calibrated_set=calibrated_set)
 
-            input_candidate_flat = input_candidate.reshape(-1,option.num_steps)
-            sequence_length_candidate_flat = sequence_length_candidate.reshape(-1)
+            prob_candidate_pre=run_epoch(session, mtest_forward, input_candidate,\
+                        sequence_length_candidate,mode='use')
+            prob_candidate=[]
+            for i in range(len(input_candidate)):
+                tem=1
+                for j in range(sequence_length_candidate[0]-1):
+                    tem*=prob_candidate_pre[i][j][input_candidate[i][j+1]]
+                tem*=prob_candidate_pre[i][j+1][option.dict_size+1]
+                prob_candidate.append(tem)
+            prob_candidate=np.array(prob_candidate)
+            if sim!=None:
+                similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                        id2sen, emb_word, option, similaritymodel)
+                prob_candidate=prob_candidate*similarity_candidate
+            prob_candidate_norm=normalize(prob_candidate)
+            prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
+            prob_candidate_prob=prob_candidate[prob_candidate_ind]
+            similarity_new = similarity_candidate[prob_candidate_ind]
 
-            prob_candidate_pre = output_p(input_candidate_flat, forwardmodel)#k*100,l,vocab
-            prob_candidate = getp(prob_candidate_pre,
-                    input_candidate_flat,sequence_length_candidate_flat, option) # K*100
-            
-            prob_candidate = np.array(prob_candidate).reshape(N_input,-1) # K,100
-            similarity_candidate=similarity_batch(input_candidate, input_original,sta_vec,\
-                        id2sen, emb_word, option, similarityfun,similaritymodel) #  K,100
-            similarity_candidate =similarity_candidate.reshape(N_input,-1)
-            prob_candidate=prob_candidate*similarity_candidate # K,100
-            prob_candidate_norm=\
-                prob_candidate/(np.maximum(prob_candidate.sum(1,keepdims=True),1e-50))
-            prob_candidate_ind=samplep(prob_candidate_norm)
-            id_sample = torch.tensor(prob_candidate_ind,dtype=torch.long).view(N_input,1)
-            prob_candidate_prob= torch.gather(torch.tensor(prob_candidate,dtype=torch.float),1,id_sample) # 5,1
-            prob_candidate_prob = prob_candidate_prob.squeeze().numpy() 
-            V_new = np.log(np.maximum(np.power(prob_candidate_prob,1.0/(sequence_length+1)),1e-200))
+            prob_old=run_epoch(session, mtest_forward, input,\
+                        sequence_length,mode='use')[0]
 
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
-            prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
-            input_ = [[x] for x in input]
-            similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
-                      option, similarityfun,similaritymodel) #K,
-            prob_old_prob = prob_old_prob*similarity_old #K,
-            V_old = np.log(np.maximum(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
+            tem=1
+            for j in range(sequence_length[0]-1):
+                tem*=prob_old[j][input[0][j+1]]
+            tem*=prob_old[j+1][option.dict_size+1]
+            prob_old_prob=tem
+            if sim!=None:
+                similarity_old=similarity(input, input_original,sta_vec,\
+                        id2sen, emb_word, option, similaritymodel)[0]
+                prob_old_prob=prob_old_prob*similarity_old
+            else:
+                similarity_old=-1
+            V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length_candidate[0]),1e-200))
+            V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-            alphat = np.minimum(1,np.exp(np.minimum((V_new-V_old)/temperature,100)))
-            for i,inp in enumerate(input):                
-                if ind>=sequence_length[i]-1 or sequence_length[i]>=option.num_steps:
-                    continue
-                alpha = alphat[i]
-                chooseind = prob_candidate_ind[i]
-                if choose_action([alpha, 1-alpha])==0:
-                    input1=input_candidate[i][chooseind]
-                    input[i] = input1
-                    sequence_length[i]  = sequence_length[i]+1
-                    print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_candidate[i][chooseind])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+            alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
+            if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
+                input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
+                sequence_length+=1
+
+                pos+=1
+                # sta_vec.insert(ind, 0.0)
+                # del(sta_vec[-1])
+                print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
+                        V_new,alphat,similarity_old,similarity_new)
+
+                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
+
 
         elif action==2: # word delete
-            prob_old = output_p(input, forwardmodel) #k,l,vocab
-            prob_old_prob = getp(prob_old,input, sequence_length, option) # K,
-            input_ = [[x] for x in input]
-            similarity_old=similarity_batch(input_, input_original, sta_vec, id2sen, emb_word,
-                      option, similarityfun,similaritymodel) #K,
-            prob_old_prob = prob_old_prob*similarity_old #K,
+            if sequence_length[0]<=2 or ind==0:
+                pos += 1
+                continue
+            prob_old=run_epoch(session, mtest_forward, input, sequence_length,\
+                        mode='use')[0]
+            tem=1
+            for j in range(sequence_length[0]-1):
+                tem*=prob_old[j][input[0][j+1]]
+            tem*=prob_old[j+1][option.dict_size+1]
+            prob_old_prob=tem
+            if sim!=None:
+                similarity_old=similarity(input, input_original,sta_vec,\
+                        id2sen, emb_word, option, similaritymodel)[0]
+                prob_old_prob=prob_old_prob*similarity_old
+            else:
+                similarity_old=-1
 
-            input_candidate, sequence_length_candidate=generate_candidate(input,\
-                    sequence_length, ind, None, option.search_size, option, mode=action,\
-                     calibrated_set=calibrated_set) # K,100,15
-            input_candidate = input_candidate[:,0,:]
-            sequence_length_candidate = sequence_length_candidate[:,0]
-            prob_new = output_p(input_candidate, forwardmodel) #k,l,vocab
-            prob_new = getp(prob_new, input_candidate,sequence_length_candidate, option) # K
+            input_candidate, sequence_length_candidate=generate_candidate_input_calibrated(input,\
+                    sequence_length, ind, None, option.search_size, option,\
+                    mode=action,calibrated_set=calibrated_set)
 
-            input_candidate = [[x] for x in input_candidate]
-            similarity_new=similarity_batch(input_candidate, input_original,sta_vec,\
-                        id2sen, emb_word, option,similarityfun, similaritymodel) #  K,
-            prob_new_prob = prob_new* similarity_new #K,
+            # delete sentence
+            prob_new=run_epoch(session, mtest_forward, input_candidate,\
+                        sequence_length_candidate,mode='use')[0]
+            
 
-            V_new = np.log(np.maximum(np.power(prob_new_prob,1.0/(sequence_length-1)),1e-200))
-            V_old = np.log(np.maximum(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
+            tem=1
+            for j in range(sequence_length_candidate[0]-1):
+                tem*=prob_new[j][input_candidate[0][j+1]]
+            tem*=prob_new[j+1][option.dict_size+1]
+            prob_new_prob=tem
+            if sim!=None:
+                similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
+                        id2sen, emb_word, option, similaritymodel)[0]
+                prob_new_prob=prob_new_prob*similarity_candidate
+            
+            #alpha is acceptance ratio of current proposal
+            if input[0] in input_candidate:
+                for candidate_ind in range(len(input_candidate)):
+                    if input[0] in input_candidate[candidate_ind: candidate_ind+1]:
+                        break
+                    pass
+                V_new = math.log(max(np.power(prob_new_prob,1.0/sequence_length_candidate[0]),1e-200))
+                V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-            alphat = np.minimum(1,np.exp(np.minimum((V_new-V_old)/temperature,100)))
-            for i,inp in enumerate(input):                
-                if ind>=sequence_length[i]-1 or sequence_length[i]<=3 or ind==0:
-                    continue
-                alpha = alphat[i]
-                if choose_action([alpha, 1-alpha])==0:
-                    input1=input_candidate[i][0]
-                    input[i] = input1
-                        # calibrated_set.append(input[i][ind])
-                    sequence_length[i]  = sequence_length[i]-1
-                    print('vold, vnew, alpha,simold, simnew', V_old[i],\
-                                    V_new[i],alpha,similarity_old[i],similarity_new[i])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[i])))
+                alphat = min(1,math.exp((V_new-V_old)/temperature))
+            else:
+                alphat=0
+         
+            if choose_action([alphat, 1-alphat])==0:
+                if input[0][ind]<option.dict_size:
+                    calibrated_set.append(input[0][ind])
+                input=np.concatenate([input[:,:ind+1], input[:,ind+2:], input[:,:1]*0+option.dict_size+1], axis=1)
+                sequence_length-=1
+                # del(sta_vec[ind])
+                # sta_vec.append(0)
+                pos -= 1
+
+                print('ind, action,oldprob,vold, vnew, alpha,simold, simnew',ind, action,prob_old_prob,V_old,\
+                            V_new,alphat,similarity_old,similarity_candidate)
+                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
+
 
         pos += 1
-    return input,V_old
+    return ' '.join(id2sen(input[0])),V_old
+
+
 
 
 
