@@ -72,6 +72,8 @@ def main():
     parser.add_argument('--keep_prob', default=1, type=float)
     parser.add_argument('--N_repeat', default=1, type=int)
     parser.add_argument('--C', default=0.05, type=float)
+    parser.add_argument('--M_kw', default=1, type=float)
+    parser.add_argument('--M_bleu', default=1, type=float)
 
     d = vars(parser.parse_args())
     option = Option(d)
@@ -116,12 +118,11 @@ def main():
         with open(option.load, 'rb') as f:
             learner.load_state_dict(torch.load(f))
 
-    experiment = Experiment(option, learner=learner, data=dataclass)
-    if option.pretrain:
-        experiment.init_embedding(option.emb_path)
-    print("Experiment created.")
-
     if not option.no_train:
+        experiment = Experiment(option, learner=learner, data=dataclass)
+        print("Experiment created.")
+        if option.pretrain:
+            experiment.init_embedding(option.emb_path)
         print("Start training...")
         experiment.train()
     else: 

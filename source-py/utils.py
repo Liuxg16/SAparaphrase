@@ -307,11 +307,9 @@ def sigma_bleu(x):
     #     return 1
     return min(1-x+0.05,1)
 
-
 def sigmoid(x):
     s = 1 / (1 + np.exp(-x))
     return s
-
 
 
 def sen2mat(s, id2sen, emb_word, option):
@@ -456,6 +454,8 @@ def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, mo
 
 def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
+    M_kw = option.M_kw
+    M_bleu = option.M_bleu
     N_candidant = len(s1_list) 
     sims=  []
     embs = []
@@ -467,11 +467,11 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
             return np.array([0])
 
     emb1 = np.concatenate(embs,0) # K,8,300
-    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
     emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
-    # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
     wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
+    # print(emb1.size(), emb2.size(), wei2.size()) #bs,300,7, bs,8,300
     emb_mat = torch.bmm(emb2,emb1) # K,8,7
     norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
     norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
@@ -480,16 +480,16 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
     sim_vec,_ = torch.max(sim_mat,2)  # K,8
     sim,_ = torch.min(sim_vec[:,wei2],1)
-    sim = sigma_word_batch(sim)
+    sim = np.power(sim.cpu().numpy(), M_kw)
 
     for s1 in s1_list:
         actual_word_lists = [[id2sen(s2)]]
         generated_word_lists = [id2sen(s1)]
         bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
-        bleu_score = sigma_bleu(bleu_score)
+        bleu_score = 1-bleu_score+0.01
         bleus.append(bleu_score)
-
-    res = sim.cpu().numpy()*np.array(bleus)
+    bleus = np.power(np.array(bleus),M_bleu)
+    res = sim*bleus
     return res
 
 
@@ -569,7 +569,6 @@ def similarity_keyword_bert_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option,
     for i,s1 in enumerate(s1_list):
         emb1 = emb[i,:,:]
         wei2=np.array([0]+sta_vec).astype(np.float32) # N*1
-        #wei2=normalize(wei2)
         
         emb_mat=np.dot(emb2,emb1.T) #N*M
         norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e)) # M*M
@@ -807,7 +806,6 @@ def getp(probabilities,input, lengths, option):
         tems.append(tem)
     return tems
 
-
 def getppl(probabilities,input, lengths, option):
     tems = []
     for probs,inp, length in zip(probabilities,input,lengths):
@@ -817,7 +815,6 @@ def getppl(probabilities,input, lengths, option):
         tem*= probs[length-1][option.dict_size+1]
         tems.append(np.power(tem,1.0/length))
     return tems
-
 
 class StrToBytes:
     def __init__(self, fileobj):
@@ -844,9 +841,6 @@ def read_word2vec(filename = None):
     f.close()
     del lines
     return vocab_vec
-
-
-
 
 class Option(object):
     def __init__(self, d):
