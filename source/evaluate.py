@@ -39,7 +39,11 @@ def evaluate_bleu(reference_path, generated_path):
     actual_word_lists = []
     with open(reference_path) as f:
         for line in f:
-            actual_word_lists.append([line.strip().lower().split()])
+            if '#' in line:
+                sents = line.strip().lower().split('#')
+                actual_word_lists.append([x.split() for x in sents])
+            else:
+                actual_word_lists.append([line.strip().lower().split()])
 
     generated_word_lists = []
     with open(generated_path) as f:
