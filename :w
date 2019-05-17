@@ -87,13 +87,22 @@ def evaluate_semantic(reference_path, generated_path):
 def evaluate_rouge(reference_path, generated_path):
     # Evaluate model scores
     actual_word_lists = []
+    ref1 = 'coco-refer1.txt'
+    ref2 = 'coco-refer2.txt'
+    ref3 = 'coco-refer3.txt'
+    ref4 = 'coco-refer4.txt'
     with open(reference_path) as f:
         for line in f:
             if '#' in line:
                 sents = line.strip().lower().split('#')
+                # appendtext(sents[0],ref1)
+                # appendtext(sents[1],ref2)
+                # appendtext(sents[2],ref3)
+                # appendtext(sents[3],ref4)
                 actual_word_lists.append([x for x in sents])
             else:
-                actual_word_lists.append(line.strip().lower().split())
+                actual_word_lists.append([line.strip().lower().split()])
+
     generated_word_lists = []
     with open(generated_path) as f:
         for line in f:
