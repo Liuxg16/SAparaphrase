@@ -69,6 +69,8 @@ def main():
     parser.add_argument('--keep_prob', default=1, type=float)
     parser.add_argument('--N_repeat', default=3, type=int)
     parser.add_argument('--C', default=0.05, type=float)
+    parser.add_argument('--M_kw', default=3, type=float)
+    parser.add_argument('--M_bleu', default=1, type=float)
 
     d = vars(parser.parse_args())
     option = Option(d)

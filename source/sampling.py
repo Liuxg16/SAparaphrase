@@ -356,7 +356,8 @@ def simulatedAnnealing(config):
     tfflag = True
 
     fileobj = open(option.emb_path,'r')
-    emb_word,emb_id=pkl.load(StrToBytes(fileobj), encoding='latin1')
+    #emb_word,emb_id=pkl.load(StrToBytes(fileobj), encoding='latin1')
+    emb_word,emb_id=pkl.load(StrToBytes(fileobj))
     fileobj.close()
     sim=option.sim
     sta_vec=list(np.zeros([option.num_steps-1]))
@@ -388,7 +389,7 @@ def simulatedAnnealing(config):
 
 def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
     if option.mode == 'kw-bleu':
-        similarity = similarity_keyword_bleu
+        similarity = similarity_keyword_bleu_tensor
     else:
         similarity = similarity_keyword
     sim = similarity
@@ -459,7 +460,7 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                     input= input1
                     print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
                                     V_new,alphat,similarity_old,similarity_candidate[prob_candidate_ind])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
+                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
 
         elif action==1: # word insert
             if sequence_length[0]>=option.num_steps:
@@ -526,7 +527,7 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                 print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
                         V_new,alphat,similarity_old,similarity_new)
 
-                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
+                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
 
 
         elif action==2: # word delete
@@ -567,18 +568,11 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                 prob_new_prob=prob_new_prob*similarity_candidate
             
             #alpha is acceptance ratio of current proposal
-            if input[0] in input_candidate:
-                for candidate_ind in range(len(input_candidate)):
-                    if input[0] in input_candidate[candidate_ind: candidate_ind+1]:
-                        break
-                    pass
-                V_new = math.log(max(np.power(prob_new_prob,1.0/sequence_length_candidate[0]),1e-200))
-                V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
+            V_new = math.log(max(np.power(prob_new_prob,1.0/sequence_length_candidate[0]),1e-200))
+            V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-                alphat = min(1,math.exp((V_new-V_old)/temperature))
-            else:
-                alphat=0
-         
+            alphat = min(1,math.exp((V_new-V_old)/temperature))
+        
             if choose_action([alphat, 1-alphat])==0:
                 if input[0][ind]<option.dict_size:
                     calibrated_set.append(input[0][ind])
@@ -590,7 +584,7 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
 
                 print('ind, action,oldprob,vold, vnew, alpha,simold, simnew',ind, action,prob_old_prob,V_old,\
                             V_new,alphat,similarity_old,similarity_candidate)
-                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])))
+                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])),sequence_length)
 
 
         pos += 1

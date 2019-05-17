@@ -453,8 +453,11 @@ def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, mo
     sim = sigma_word_batch(sim)
     return sim.cpu().numpy()
 
+
 def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
+    M_kw = option.M_kw
+    M_bleu = option.M_bleu
     N_candidant = len(s1_list) 
     sims=  []
     embs = []
@@ -464,12 +467,13 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
         embs.append(np.expand_dims(emb1,axis=0))
         if len(id2sen(s1))==0:
             return np.array([0])
+
     emb1 = np.concatenate(embs,0) # K,8,300
-    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1)
     emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1)
     emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1)
-    # print(emb1.size(), emb2.size()) #bs,300,7, bs,8,300
     wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
+    # print(emb1.size(), emb2.size(), wei2.size()) #bs,300,7, bs,8,300
     emb_mat = torch.bmm(emb2,emb1) # K,8,7
     norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
     norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
@@ -478,17 +482,18 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
     sim_vec,_ = torch.max(sim_mat,2)  # K,8
     sim,_ = torch.min(sim_vec[:,wei2],1)
-    sim = sigma_word_batch(sim)
+    sim = np.power(sim.numpy(), M_kw)
 
     for s1 in s1_list:
         actual_word_lists = [[id2sen(s2)]]
         generated_word_lists = [id2sen(s1)]
         bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
-        bleu_score = sigma_bleu(bleu_score)
+        bleu_score = 1-bleu_score+0.01
         bleus.append(bleu_score)
-
-    res = sim.numpy()*np.array(bleus)
+    bleus = np.power(np.array(bleus),M_bleu)
+    res = sim*bleus
     return res
+
 
 
 def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
@@ -519,11 +524,16 @@ def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, mode
         generated_word_lists = [id2sen(s1)]
         # bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[3]
         bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
-        bleu_score = sigma_bleu(bleu_score)
+ #       bleu_score = sigma_bleu(bleu_score)
+        bleu_score = 1-bleu_score+0.01
         bleus.append(bleu_score)
-
+    M_bleu = 1
+    M_kw = 3
+    bleus = np.power(np.array(bleus),M_bleu)
+ 
+    sim = np.power(np.array(sim), M_kw)
     # bleus = (1.0-sigmoid(np.minimum(bleus,0.9999)))
-    res = np.array(sims)*np.array(bleus)
+    res = bleus*sim
     return res
 
 def similarity_keyword_bert(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
