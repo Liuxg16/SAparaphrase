@@ -77,6 +77,16 @@ def main():
     np.random.seed(option.seed)
     os.environ["CUDA_VISIBLE_DEVICES"] = option.gpu
     config = option
+
+    if option.exp_name is None:
+      option.tag = time.strftime("%y-%m-%d-%H-%M")
+    else:
+      option.tag = option.exp_name  
+    option.this_expsdir = os.path.join(option.exps_dir, option.tag)
+    if not os.path.exists(option.this_expsdir):
+        os.makedirs(option.this_expsdir)
+
+
     if option.batch_size==1:
         simulatedAnnealing(option)
     else:

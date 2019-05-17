@@ -382,8 +382,9 @@ def simulatedAnnealing(config):
             if maxV<V:
                 sampledsen = sen
                 maxV = V
-        print('best',sampledsen, maxV)
-        appendtext(sampledsen, option.save_path)
+            appendtext(sampledsen, os.path.join(option.this_expsdir,option.save_path+\
+                    'top-{}'.format(k)))
+
 
 def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
     if option.mode == 'kw-bleu':
