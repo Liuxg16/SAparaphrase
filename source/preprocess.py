@@ -64,6 +64,45 @@ def reproducetest(filename):
     train_object.close()
     train_object_refer.close()
 
+
+def generate_twitter_test(filename):
+    trainpath = 'data/twitterdata/twitter-test.txt'
+    trainrefer = 'data/twitterdata/twitter-refer.txt'
+    train_object = open(trainpath, 'w')
+    train_object_refer = open(trainrefer, 'w')
+    text2id = {}
+    tests = []
+    refers = []
+    test2refer = {}
+    with open(filename) as f:
+        for line in f:
+            text = line.split('\t')
+            if len(text)==4:
+		        pass
+            else:
+                continue
+            tup = text[2]
+            if int(tup[1])<= int(tup[3])/2:
+		        continue
+            s = utils.clarify(text[0]).lower().strip().strip('.')
+            s1 = utils.clarify(text[1]).lower().strip().strip('.')
+            s1 = s1.replace('#','  ')
+            s = ' '.join(s.split()[:15])
+            if test2refer.has_key(s):
+                test2refer[s].append(s1)
+            else:
+                test2refer[s] = s1
+
+    for x,y in test2refer.items():
+        train_object.write(x)
+        train_object.write('\n')
+        train_object_refer.write(' # '.join(y))
+        train_object_refer.write('\n')
+
+    train_object.close()
+    train_object_refer.close()
+
+
 def transfer2utf(filename):
     path = 'temp.txt'
     train_object = open(path, 'w')
