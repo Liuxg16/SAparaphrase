@@ -378,8 +378,8 @@ def simulatedAnnealing(config):
         print(sta_vec)
         maxV = -30
         for k in range(option.N_repeat):
-            #sen, V = sa(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
-            sen, V = sa_normal(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
+            sen, V = sa(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
+            #sen, V = sa_normal(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
             print(sen,V)
             if maxV<V:
                 sampledsen = sen
@@ -389,7 +389,7 @@ def simulatedAnnealing(config):
 
 def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
     if option.mode == 'kw-bleu':
-        similarity = similarity_keyword_bleu_tensor
+        similarity = similarity_keyword_bleu_tensor_final
     else:
         similarity = similarity_keyword
     sim = similarity

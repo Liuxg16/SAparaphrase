@@ -8,6 +8,10 @@ from zpar import ZPar
 from data import array_data
 from copy import copy
 import collections, math, torch
+import sent2vec
+
+sentmodel = sent2vec.Sent2vecModel()
+sentmodel.load_model('wiki_unigrams.bin')
 
 
 bleu_score_weights = {
@@ -328,106 +332,6 @@ def sen2mat(s, id2sen, emb_word, option):
             mat.append(np.random.random([option.hidden_size]))
     return np.array(mat)
 
-def similarity_semantic(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
-    K = 4
-    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
-    sourcesent2 = [' '.join(id2sen(s2))] * len(s1_list)
-    rep1 = model.get_encoding(sourcesent, sourcesent)
-    rep2 = model.get_encoding(sourcesent,sourcesent2)
-    rep3 = model.get_encoding(sourcesent2,sourcesent2)
-    rep1 = (rep1+rep3)/2
-    norm1 = rep1.norm(2,1)
-    norm2 = rep2.norm(2,1)
-    semantic = torch.sum(rep1*rep2,1)/(norm1*norm2)
-    semantic = semantic*(1- (torch.abs(norm1-norm2)/torch.max(norm1,norm2)))
-    semantics = semantic.cpu().numpy()
-    res = np.power(semantics,K)
-    return res
-
-def similarity_semantic_bleu(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
-    K = 12
-    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
-    sourcesent2 = [' '.join(id2sen(s2))] * len(s1_list)
-    rep1 = model.get_encoding(sourcesent, sourcesent)
-    rep2 = model.get_encoding(sourcesent,sourcesent2)
-    rep3 = model.get_encoding(sourcesent2,sourcesent2)
-    rep1 = (rep1+rep3)/2
-    norm1 = rep1.norm(2,1)
-    norm2 = rep2.norm(2,1)
-    semantic = torch.sum(rep1*rep2,1)/(norm1*norm2)
-    semantic = semantic*(1- (torch.abs(norm1-norm2)/torch.max(norm1,norm2)))
-    semantics = semantic.cpu().numpy()
-    bleus = []
-    for s1 in s1_list:
-        actual_word_lists = [[id2sen(s2)]*len(s1_list)]
-        generated_word_lists = [id2sen(s1)]
-        bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[1]
-        bleus.append(bleu_score)
-
-    bleus = (1.0-sigmoid(np.minimum(bleus,0.999)))
-    semantics = np.power(semantics,K)
-    res = bleus*semantics
-    return res
-
-def similarity_semantic_keyword(s1_list,s2, sta_vec, id2sen, emb_word, option, model):
-    C1 = 0.1
-    K = 4
-    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
-    sourcesent2 = [' '.join(id2sen(s2))] * len(s1_list)
-    rep1 = model.get_encoding(sourcesent, sourcesent)
-    rep2 = model.get_encoding(sourcesent,sourcesent2)
-    rep3 = model.get_encoding(sourcesent2,sourcesent2)
-    rep1 = (rep1+rep3)/2
-    norm1 = rep1.norm(2,1)
-    norm2 = rep2.norm(2,1)
-    semantic = torch.sum(rep1*rep2,1)/(norm1*norm2)
-    semantic = semantic*(1- (torch.abs(norm1-norm2)/torch.max(norm1,norm2)))
-    semantics = semantic.cpu().numpy()
-    res = np.power(semantics,K)
-    semantics = []
-    for s, s1 in zip(res, s1_list):
-        tem = 1
-        for i,x in zip(sta_vec,s2):
-            if i==1 and x not in s1:
-                tem *= C1
-        semantics.append(s*tem)
-    res = np.array(semantics)
-    return res
-
-def similarity_keyword(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
-    e=1e-5
-    sims=  []
-    for s1 in s1_list:
-        emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
-        #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
-        emb2=sen2mat(s2, id2sen, emb_word, option) # N*k
-        wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32) # N*1
-        #wei2=normalize(wei2)
-        
-        emb_mat=np.dot(emb2,emb1.T) #N*M
-        norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e)) # M*M
-        norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e)) #N*N
-        sim_mat=np.dot(norm2,emb_mat).dot(norm1) #N*M
-        sim_vec=sim_mat.max(axis=1) #N
-        sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
-        sim = sigma_word(sim)
-        sims.append(sim)
-        # print(' '.join(id2sen(s1)), ' '.join(id2sen(s2)), sim)
-        # print(sim_vec*wei2)
-    res = np.array(sims)
-    return res
-
-    def similarity_batch_word(s1, s2, sta_vec, option):
-        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
-
-def similarity_batch(s1_lists, s2s, sta_vecs, id2sen, emb_word, option, simfun, model = None):
-    simss= []
-    for s1_list,s2, sta_vec in zip(s1_lists,s2s, sta_vecs):
-        sims = simfun(s1_list, s2, sta_vec, id2sen, emb_word, option, model)
-        simss.append(sims)
-    res = np.concatenate(simss,0)
-    return res
-
 def similarity_keyword_tensor(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
     N_candidant = len(s1_list) 
@@ -494,116 +398,61 @@ def similarity_keyword_bleu_tensor(s1_list, s2, sta_vec, id2sen, emb_word, optio
     res = sim*bleus
     return res
 
-
-
-def similarity_keyword_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
+def similarity_keyword_bleu_tensor_final(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
     e=1e-5
+    M_kw = option.M_kw
+    M_bleu = option.M_bleu
+    N_candidant = len(s1_list) 
     sims=  []
+    embs = []
     bleus = []
     for s1 in s1_list:
         emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
-        #wei2=normalize( np.array([-np.log(id2freq[x]) for x in s2 if x<=config.dict_size]))
-        emb2=sen2mat(s2, id2sen, emb_word, option) # N*k
-        wei2=np.array(sta_vec[:len(emb2)]).astype(np.float32) # N*1
-        #wei2=normalize(wei2)
-        
-        emb_mat=np.dot(emb2,emb1.T) #N*M
-        norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e)) # M*M
-        norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e)) #N*N
-        sim_mat=np.dot(norm2,emb_mat).dot(norm1) #N*M
-        sim_vec=sim_mat.max(axis=1) #N
-        # debug
-        # print('sss',sim_vec)
-        # print(wei2)
-        # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
-        sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
-        sim = sigma_word(sim)
-        sims.append(sim)
+        embs.append(np.expand_dims(emb1,axis=0))
+        if len(id2sen(s1))==0:
+            return np.array([0])
 
-        actual_word_lists = [[id2sen(s2)]]
-        generated_word_lists = [id2sen(s1)]
-        # bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[3]
-        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
- #       bleu_score = sigma_bleu(bleu_score)
-        bleu_score = 1-bleu_score+0.01
-        bleus.append(bleu_score)
-    M_bleu = 1
-    M_kw = 3
-    bleus = np.power(np.array(bleus),M_bleu)
- 
-    sim = np.power(np.array(sim), M_kw)
-    # bleus = (1.0-sigmoid(np.minimum(bleus,0.9999)))
-    res = bleus*sim
-    return res
-
-def similarity_keyword_bert(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
-    e=1e-5
-    sims=  []
-    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
-    sourcesent2 = [' '.join(id2sen(s2))]
-    sourcesent = sourcesent+sourcesent2
-    emb = model.get_representation(sourcesent)
-    N_candidant = len(s1_list) 
-    emb2 = emb[-1,:,:].unsqueeze(0).repeat(N_candidant,1,1) # K,15*d
-    emb1 = emb[:-1,:,:].permute(0,2,1) #K,d,15
-
-    wei2= torch.tensor([0]+sta_vec,dtype=torch.uint8)
-    emb_mat = torch.bmm(emb2,emb1) # K,15,15
-    norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,15
-    norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,15
+    emb1 = np.concatenate(embs,0) # K,8,300
+    emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+    emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1)
+    emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1)
+    wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8) #8
+    # print(emb1.size(), emb2.size(), wei2.size()) #bs,300,7, bs,8,300
+    emb_mat = torch.bmm(emb2,emb1) # K,8,7
+    norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
+    norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
     norm2 = torch.diag_embed(norm2) # K,15,15
     norm1 = torch.diag_embed(norm1)
-    sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,15,15
-    sim_vec,_ = torch.max(sim_mat,2)  # K,15
+    sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
+    sim_vec,_ = torch.max(sim_mat,2)  # K,8
     sim,_ = torch.min(sim_vec[:,wei2],1)
-    sim = sigma_word_bert(sim)
-    return sim.cpu().numpy()
-
-
-    def similarity_batch_word(s1, s2, sta_vec, option):
-        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
-
-def similarity_keyword_bert_bleu(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
-    e=1e-5
-    sims=  []
-    sourcesent = [' '.join(id2sen(s1)) for s1 in s1_list]
-    sourcesent2 = [' '.join(id2sen(s2))]
-    sourcesent = sourcesent+sourcesent2
-    emb = model.get_representation(sourcesent).numpy()
+    sim = np.power(sim.numpy(), M_kw)
+        
+    s1_raws = [' '.join(id2sen(s1, True)) for s1 in s1_list]
+    sent1_emb = sentmodel.embed_sentences(s1_raws)
+    sent2_emb = sentmodel.embed_sentences([' '.join(id2sen(s2,True))])
+    emb1 = np.array(sent1_emb) # k,emb
+    emb2 = np.array(sent2_emb)
+    num = np.dot(emb1,emb2.T)
+    denom = np.linalg.norm(emb1, axis=1) * np.linalg.norm(emb2)
+    sentsim = num.squeeze()/(denom)
     
-    emb2 = emb[-1,:,:]
-    actual_word_lists = [[id2sen(s2)]]
-    bleus = [] 
-    for i,s1 in enumerate(s1_list):
-        emb1 = emb[i,:,:]
-        wei2=np.array([0]+sta_vec).astype(np.float32) # N*1
-        #wei2=normalize(wei2)
-        
-        emb_mat=np.dot(emb2,emb1.T) #N*M
-        norm1=np.diag(1/(np.linalg.norm(emb1,2,axis=1)+e)) # M*M
-        norm2=np.diag(1/(np.linalg.norm(emb2,2,axis=1)+e)) #N*N
-        sim_mat=np.dot(norm2,emb_mat).dot(norm1) #N*M
-        sim_vec=sim_mat.max(axis=1) #N
-        # debug
-        # print('sss',sim_vec)
-        # print(wei2)
-        # sim=min([x for x in list(sim_vec*wei2) if x>0]+[1])
-        sim=min([x for x,y in zip(list(sim_vec*wei2),list(wei2)) if y>0]+[1])
-        sim = sigma_word1(sim)
-        sims.append(sim)
 
+
+
+
+    for s1 in s1_list:
+        actual_word_lists = [[id2sen(s2)]]
         generated_word_lists = [id2sen(s1)]
-        bleu_score = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)[3]
-        bleu_score = sigma_bleu(bleu_score)
+        bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
+        bleu_score = 1-bleu_score+0.01
         bleus.append(bleu_score)
-        
-    # bleus = (1.0-sigmoid(np.minimum(bleus,0.9999)))
-    res = np.array(sims)*np.array(bleus)
+
+    bleus = np.power(np.array(bleus),M_bleu)
+    res = sim*bleus*(sentsim.squeeze())
     return res
 
 
-    def similarity_batch_word(s1, s2, sta_vec, option):
-        return np.array([ similarity_word(x,s2,sta_vec, option) for x in s1 ])
 
 def cut_from_point(input, sequence_length, ind,option, mode=0):
     batch_size=input.shape[0]

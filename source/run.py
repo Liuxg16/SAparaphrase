@@ -4,6 +4,7 @@ import time,random
 from sampling import *
 import argparse
 from utils import Option
+import sent2vec
 
 def main():
 
@@ -88,6 +89,8 @@ def main():
     if not os.path.exists(option.this_expsdir):
         os.makedirs(option.this_expsdir)
     option.save()
+    
+
 
     if option.batch_size==1:
         simulatedAnnealing(option)

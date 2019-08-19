@@ -10,3 +10,4 @@ POS
 *.tsv
 paraphrase
 nohup.out
+*.bin

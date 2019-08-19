@@ -32,13 +32,27 @@ class Dicts(object):
         else:
             return [self.sen2id(x) for x in s]
     
-    def id2sen(self, s):
+    def id2sen(self, s, filtering =False):
         if s==[]:
             return []
         Dict=self.Dict2
         dict_size=len(Dict)
         s_new=[]
-        if type(s[0])!=type([]):
+        if filtering and type(s[0])!=type([]):
+            for item in s:
+                if item in Dict:
+                    w = Dict[item]
+                    if len(w)!=len(w.decode('utf-8')):
+                        s_new.append( 'UNK')
+                    else:
+                        s_new.append(w)
+                elif item==dict_size:
+                    s_new.append( 'UNK')
+                else:
+                    pass
+            return s_new
+
+        elif not filtering and type(s[0])!=type([]):
             for item in s:
                 if item in Dict:
                     s_new.append(Dict[item])
