@@ -22,7 +22,7 @@ python3 source/run.py --data_path data/input/input.txt --use_data_path data/inpu
 python3 source-py/run.py --exps_dir exps-sampling --exp_name coco-rep1  --gpu 0  --hidden_size 300 --dropout 0.2 --data_path data/quora/test.txt --emb_size 300 --no_train --mode kw-bleu --forward_path exps/coco-forward/ckpt/model-best.pkl --backward_path exps/coco-backward/ckpt/model-best.pkl --batch_size 1 --use_data_path data/cocodata/cocovalid.txt  --save_path sa.txt --emb_path data/cocodata/emb.pkl --dict_path data/cocodata/dict.pkl --C 0.3  --M_kw 3   --M_bleu 1 --N_repeat 1  
 
 # quora
-python source/run.py --data_path data/input/input.txt --use_data_path data/test.txt --mode kw-bleu  --N_repeat 5  --save_path results/sa-calibrate-kw6-rep5.txt   --batch_size 1 --gpu 3  --M_kw 6 --search_size 50
+python source/run.py --data_path data/input/input.txt --use_data_path data/quoradata/test.txt --mode kw-bleu --N_repeat 3 --exps_dir exps-sampling/ --exp_name 0818-normal --batch_size 1 --gpu 1 --M_kw 8 --search_size 50 --C 0.03
 
 # twitter
 python3 source-py/run.py --exps_dir exps-sampling --exp_name twi-rep1  --gpu 0 --hidden_size 300 --dropout 0.2 --data_path data/quora/test.txt --emb_size 300 --no_train --mode kw-bleu --forward_path exps/twi-forward/ckpt/model-best.pkl --backward_path exps/twi-backward/ckpt/model-best.pkl --batch_size 1 --use_data_path data/twitterdata/twitter-test.txt --save_path sa.txt --emb_path data/twitterdata/emb.pkl --dict_path data/twitterdata/dict.pkl --C 0.3 --M_kw 3 --M_bleu 1 --N_repeat 1 

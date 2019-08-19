@@ -87,7 +87,7 @@ def main():
     option.this_expsdir = os.path.join(option.exps_dir, option.tag)
     if not os.path.exists(option.this_expsdir):
         os.makedirs(option.this_expsdir)
-
+    option.save()
 
     if option.batch_size==1:
         simulatedAnnealing(option)
