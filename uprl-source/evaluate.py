@@ -1,12 +1,8 @@
 import argparse, sys, torch
 sys.path.append('/home/liuxg/workspace/SAparaphrase/')
 sys.path.append('/home/liuxg/workspace/SAparaphrase/bert')
+from bert.bertinterface import BertEncoding, BertSimilarity
 from utils import get_corpus_bleu_scores, savetexts
-from nltk.translate.bleu_score import corpus_bleu
-import nltk
-from rouge import Rouge
-from utils import appendtext
-import numpy as np
 
 class Option(object):
     def __init__(self, d):
@@ -32,57 +28,25 @@ def main():
         evaluate_bleu(option.reference_path, option.generated_path)
     elif option.mode =='semantic':
         evaluate_semantic(option.reference_path, option.generated_path)
-    elif option.mode =='rouge':
-        evaluate_rouge(option.reference_path, option.generated_path)
     else:
-        print('not a valid argument')
+        pass
 
-def evaluate_bleu_corpus(reference_path, generated_path):
-    # Evaluate model scores
-    actual_word_lists = []
-    with open(reference_path) as f:
-        for line in f:
-            if '#' in line:
-                sents = line.strip().lower().split('#')
-                actual_word_lists.append([x.split() for x in sents])
-            else:
-                actual_word_lists.append([line.strip().lower().split()])
-
-    generated_word_lists = []
-    with open(generated_path) as f:
-        for line in f:
-            generated_word_lists.append(line.strip().lower().split())
-    actual_word_lists = actual_word_lists[:len(generated_word_lists)]
-    bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
-    sumss = 0
-    for s in bleu_scores:
-        sumss += 0.25*bleu_scores[s]
-    print('bleu scores:', sumss, bleu_scores)
+ 
 
 def evaluate_bleu(reference_path, generated_path):
     # Evaluate model scores
     actual_word_lists = []
     with open(reference_path) as f:
         for line in f:
-            if '#' in line:
-                sents = line.strip().lower().split('#')
-                actual_word_lists.append([x.split() for x in sents])
-            else:
-                actual_word_lists.append([line.strip().lower().split()])
+            actual_word_lists.append([line.strip().lower().split()])
 
     generated_word_lists = []
     with open(generated_path) as f:
         for line in f:
             generated_word_lists.append(line.strip().lower().split())
-    actual_word_lists = actual_word_lists[:len(generated_word_lists)]
 
-    bleu_scores = [nltk.translate.bleu_score.sentence_bleu(a,g,
-        smoothing_function=nltk.translate.bleu_score.SmoothingFunction().method1) for a,g in zip(\
-                actual_word_lists, generated_word_lists) ]
-    print('sentence level bleu', np.mean(bleu_scores))
-
-
-
+    bleu_scores = get_corpus_bleu_scores(actual_word_lists, generated_word_lists)
+    print('bleu scores:', bleu_scores)
 
 def evaluate_semantic(reference_path, generated_path):
     actual_word_lists = []
@@ -111,25 +75,7 @@ def evaluate_semantic(reference_path, generated_path):
     summation = torch.sum(rep1*rep2,1)/(rep1.norm(2,1)*rep2.norm(2,1))
     print(torch.mean(summation))
 
-def evaluate_rouge(reference_path, generated_path):
-    # Evaluate model scores
-    actual_word_lists = []
-    with open(reference_path) as f:
-        for line in f:
-            if '#' in line:
-                sents = line.strip().lower().split('#')
-                actual_word_lists.append([x for x in sents])
-            else:
-                actual_word_lists.append(line.strip().lower().split())
-    generated_word_lists = []
-    with open(generated_path) as f:
-        for line in f:
-            generated_word_lists.append(line.strip().lower().split())
-    actual_word_lists = actual_word_lists[:len(generated_word_lists)]
-    print(len(actual_word_lists),len(generated_word_lists))
-    rouge = Rouge()
-    scores = rouge.get_scores(generated_word_lists, actual_word_lists, avg=True)
-    print scores
+
 
 def test_semantic(s1, s2):
     model =  BertSimilarity()
@@ -141,7 +87,17 @@ def test_semantic(s1, s2):
     semantic = semantic*(1- (abs(rep1.norm()-rep2.norm())/max(rep1.norm(),rep2.norm())))
     print(torch.mean(semantic))
 
+
+
 if __name__ == "__main__":
     main()
-
+    s1 = ['do you like the red car']
+    s2 = ['is the red car  your favorite']
+    s3 = ['how should i prepare for lunch']
+    s4 = ['how should you prepare for gpa ']
+    s5 = ['how should you make for lunch']
+    # test_semantic(s1,s2)
+    # test_semantic(s4,s2)
+    # test_semantic(s4,s3)
+    # test_semantic(s5,s3)
 
