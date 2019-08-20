@@ -452,7 +452,60 @@ def similarity_keyword_bleu_tensor_final(s1_list, s2, sta_vec, id2sen, emb_word,
     res = sim*bleus*(sentsim.squeeze())
     return res
 
-
+def similarity_keyword_bleu_tensor_sent2vec_cuda(s1_list, s2, sta_vec, id2sen, emb_word, option, model = None):
+	e=1e-5
+	M_kw = option.M_kw
+	M_bleu = option.M_bleu
+	N_candidant = len(s1_list)
+	sims=  []
+	embs = []
+	bleus = []
+	for s1 in s1_list:
+	    emb1=sen2mat(s1, id2sen, emb_word, option) # M*K
+	    embs.append(np.expand_dims(emb1,axis=0))
+	    if len(id2sen(s1))==0:
+	        return np.array([0])
+	
+	emb1 = np.concatenate(embs,0) # K,8,300
+	emb2= sen2mat(s2, id2sen, emb_word, option) # N*k
+	emb1 = torch.tensor(emb1, dtype=torch.float).permute(0,2,1).cuda()
+	emb2 = torch.tensor(emb2, dtype=torch.float).unsqueeze(0).repeat(N_candidant,1,1).cuda()
+	wei2= torch.tensor(sta_vec[:emb2.size(1)],dtype=torch.uint8).cuda() #8
+	emb_mat = torch.bmm(emb2,emb1) # K,8,7
+	norm2 = 1/(torch.norm(emb2,p= 2,dim=2)+e) # K,8,8
+	norm1 = 1/(torch.norm(emb1,p= 2,dim=1)+e) # K,7,7
+	norm2 = torch.diag_embed(norm2) # K,15,15
+	norm1 = torch.diag_embed(norm1)
+	sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
+	sim_vec,_ = torch.max(sim_mat,2)  # K,8
+	sim,_ = torch.min(sim_vec[:,wei2],1)
+	sim = np.power(sim.cpu().numpy(), M_kw)
+	
+	s1_raws = [' '.join(id2sen(s1, True)) for s1 in s1_list]
+	sent1_emb = sentmodel.embed_sentences(s1_raws)
+	sent2_emb = sentmodel.embed_sentences([' '.join(id2sen(s2,True))])
+	emb1 = torch.tensor(sent1_emb, dtype=torch.float).cuda() # k,emb
+	emb2 = torch.tensor(sent2_emb, dtype = torch.float).cuda()
+	num = torch.matmul(emb1,emb2.transpose(0,1))
+	denom = torch.norm(emb1,p=2, dim=1) * torch.norm(emb2)
+	sentsim = num.squeeze()/(denom)
+	
+	emb1 = np.array(sent1_emb) # k,emb
+	emb2 = np.array(sent2_emb)
+	num = np.dot(emb1,emb2.T)
+	denom = np.linalg.norm(emb1, axis=1) * np.linalg.norm(emb2)
+	sentsim1 = num.squeeze()/(denom)
+	
+	for s1 in s1_list:
+	    actual_word_lists = [[id2sen(s2)]]
+	    generated_word_lists = [id2sen(s1)]
+	    bleu_score = compute_bleu(actual_word_lists, generated_word_lists)
+	    bleu_score = 1-bleu_score+0.01
+	    bleus.append(bleu_score)
+	
+	bleus = np.power(np.array(bleus),M_bleu)
+	res = sim*bleus*(sentsim.cpu().numpy())
+	return res
 
 def cut_from_point(input, sequence_length, ind,option, mode=0):
     batch_size=input.shape[0]

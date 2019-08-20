@@ -346,8 +346,9 @@ def simulatedAnnealing(config):
     init = tf.global_variables_initializer()
   
     dataclass = data.Data(config)       
-
-    session = tf.Session()
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    session = tf.Session(config=tf_config)
     session.run(init)
     saver_forward.restore(session, option.forward_save_path)
     saver_backward.restore(session, option.backward_save_path)
@@ -367,20 +368,22 @@ def simulatedAnnealing(config):
     generateset = []
     
     temperatures =  option.C*(1.0/100)*np.array(list(range(option.sample_time+1,1,-1)))
-    print(temperatures)
     option.temperatures = temperatures
     
     for sen_id in range(use_data.length):
         sta_vec=sta_vec_list[sen_id]
         input, sequence_length, _=use_data(1, sen_id)
-        print('----------------')
-        print(' '.join(id2sen(input[0])))
-        print(sta_vec)
         maxV = -30
         for k in range(option.N_repeat):
-            sen, V = sa(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
+            input_feed = copy(input)
+            sequence_length_feed = copy(sequence_length)
+            #print('----------------')
+            #print(' '.join(id2sen(input[0])),  sequence_length)
+            #print(sta_vec)
+
+            sen, V = sa(input_feed, sequence_length_feed, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
             #sen, V = sa_normal(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
-            print(sen,V)
+            #print(sen,V)
             if maxV<V:
                 sampledsen = sen
                 maxV = V
@@ -389,7 +392,8 @@ def simulatedAnnealing(config):
 
 def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
     if option.mode == 'kw-bleu':
-        similarity = similarity_keyword_bleu_tensor_final
+        #similarity = similarity_keyword_bleu_tensor_final
+        similarity = similarity_keyword_bleu_tensor_sent2vec_cuda
     else:
         similarity = similarity_keyword
     sim = similarity
@@ -458,9 +462,9 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                     if input[0][ind+1]<option.dict_size:
                         calibrated_set.append(input[0][ind+1])
                     input= input1
-                    print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
-                                    V_new,alphat,similarity_old,similarity_candidate[prob_candidate_ind])
-                    print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
+                    #print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
+                    #                V_new,alphat,similarity_old,similarity_candidate[prob_candidate_ind])
+                    #print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
 
         elif action==1: # word insert
             if sequence_length[0]>=option.num_steps:
@@ -520,14 +524,12 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
             if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
                 input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                 sequence_length+=1
-
                 pos+=1
-                # sta_vec.insert(ind, 0.0)
-                # del(sta_vec[-1])
-                print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
-                        V_new,alphat,similarity_old,similarity_new)
 
-                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
+                #print('ind, action,oldprob,vold, vnew, alpha,simold, simnew', ind, action,prob_old_prob,V_old,\
+                #        V_new,alphat,similarity_old,similarity_new)
+
+                #print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])), sequence_length)
 
 
         elif action==2: # word delete
@@ -582,14 +584,13 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                 # sta_vec.append(0)
                 pos -= 1
 
-                print('ind, action,oldprob,vold, vnew, alpha,simold, simnew',ind, action,prob_old_prob,V_old,\
-                            V_new,alphat,similarity_old,similarity_candidate)
-                print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])),sequence_length)
+                #print('ind, action,oldprob,vold, vnew, alpha,simold, simnew',ind, action,prob_old_prob,V_old,\
+                #            V_new,alphat,similarity_old,similarity_candidate)
+                #print('Temperature:{:3.3f}:   '.format(temperature)+' '.join(id2sen(input[0])),sequence_length)
 
 
         pos += 1
     return ' '.join(id2sen(input[0])),V_old
-
 
 def sa_normal(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward, mtest_backward, option):
     if option.mode == 'kw-bleu':
@@ -718,7 +719,7 @@ def sa_normal(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_
             V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length_candidate[0]),1e-200))
             V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-            alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
+            alphat = min(1,math.exp(min((V_new-V_old)/temperature,100)))
             if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
                 input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                 sequence_length+=1
@@ -773,7 +774,7 @@ def sa_normal(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_
             V_new = math.log(max(np.power(prob_new_prob,1.0/sequence_length_candidate[0]),1e-200))
             V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-            alphat = min(1,math.exp((V_new-V_old)/temperature))
+            alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
         
             if choose_action([alphat, 1-alphat])==0:
                 input=np.concatenate([input[:,:ind+1], input[:,ind+2:], input[:,:1]*0+option.dict_size+1], axis=1)
