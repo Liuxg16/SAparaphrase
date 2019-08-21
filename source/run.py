@@ -43,7 +43,7 @@ def main():
 
     # evaluation
     parser.add_argument('--sim', default='word_max', type=str)
-    parser.add_argument('--mode', default='sa', type=str)
+    parser.add_argument('--mode', default='kw-bleu', type=str)
     parser.add_argument('--accuracy', default=False, action="store_true")
     parser.add_argument('--top_k', default=10, type=int)
     parser.add_argument('--accumulate_step', default=1, type=int)
@@ -59,7 +59,7 @@ def main():
     parser.add_argument('--max_key_rate', default=0.5, type=float)
     parser.add_argument('--rare_since', default=30000, type=int)
     parser.add_argument('--sample_time', default=100, type=int)
-    parser.add_argument('--search_size', default=100, type=int)
+    parser.add_argument('--search_size', default=50, type=int)
     parser.add_argument('--action_prob', default=[0.3,0.3,0.3,0.3], type=list)
     parser.add_argument('--just_acc_rate', default=0.0, type=float)
     parser.add_argument('--sim_mode', default='keyword', type=str)
@@ -68,9 +68,9 @@ def main():
     parser.add_argument('--backward_save_path', default='data/tfmodel/backward.ckpt', type=str)
     parser.add_argument('--max_grad_norm', default=5, type=float)
     parser.add_argument('--keep_prob', default=1, type=float)
-    parser.add_argument('--N_repeat', default=3, type=int)
-    parser.add_argument('--C', default=0.05, type=float)
-    parser.add_argument('--M_kw', default=3, type=float)
+    parser.add_argument('--N_repeat', default=1, type=int)
+    parser.add_argument('--C', default=0.03, type=float)
+    parser.add_argument('--M_kw', default=7, type=float)
     parser.add_argument('--M_bleu', default=1, type=float)
 
     d = vars(parser.parse_args())
@@ -89,8 +89,6 @@ def main():
     if not os.path.exists(option.this_expsdir):
         os.makedirs(option.this_expsdir)
     option.save()
-    
-
 
     if option.batch_size==1:
         simulatedAnnealing(option)

@@ -373,7 +373,7 @@ def simulatedAnnealing(config):
     for sen_id in range(use_data.length):
         sta_vec=sta_vec_list[sen_id]
         input, sequence_length, _=use_data(1, sen_id)
-        maxV = -30
+        maxV = -1e100
         for k in range(option.N_repeat):
             input_feed = copy(input)
             sequence_length_feed = copy(sequence_length)
@@ -383,7 +383,7 @@ def simulatedAnnealing(config):
 
             sen, V = sa(input_feed, sequence_length_feed, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
             #sen, V = sa_normal(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
-            #print(sen,V)
+            print(sen,V)
             if maxV<V:
                 sampledsen = sen
                 maxV = V
@@ -445,14 +445,15 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                 similarity_candidate=similarity(input_candidate, input_original,sta_vec,\
                         id2sen, emb_word, option, similaritymodel)
                 prob_candidate=prob_candidate*similarity_candidate
-
             prob_candidate_norm=normalize(prob_candidate)
             prob_candidate_ind=sample_from_candidate(prob_candidate_norm)
-            prob_candidate_prob=prob_candidate[prob_candidate_ind]
+
+            prob_candidate_prob= float(prob_candidate[prob_candidate_ind])
             
             V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length),1e-200))
             V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
-            alphat = min(1,math.exp(min((V_new-V_old)/temperature,100)))
+            diff = max(min((V_new-V_old)/temperature,100),-100) 
+            alphat = min(1,math.exp(diff))
             
             if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
                 input1=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
@@ -519,8 +520,8 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
                 similarity_old=-1
             V_new = math.log(max(np.power(prob_candidate_prob,1.0/sequence_length_candidate[0]),1e-200))
             V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
-
-            alphat = min(1,math.exp(min((V_new-V_old)/temperature,200)))
+            diff = max(min((V_new-V_old)/temperature,100),-100) 
+            alphat = min(1,math.exp(diff))
             if choose_action([alphat, 1-alphat])==0 and input_candidate[prob_candidate_ind][ind]<option.dict_size:
                 input=input_candidate[prob_candidate_ind:prob_candidate_ind+1]
                 sequence_length+=1
@@ -573,7 +574,9 @@ def sa(input, sequence_length, sta_vec, id2sen, emb_word, session, mtest_forward
             V_new = math.log(max(np.power(prob_new_prob,1.0/sequence_length_candidate[0]),1e-200))
             V_old = math.log(max(np.power(prob_old_prob, 1.0/sequence_length),1e-200))
 
-            alphat = min(1,math.exp((V_new-V_old)/temperature))
+            diff = max(min((V_new-V_old)/temperature,100),-100) 
+            alphat = min(1,math.exp(diff))
+
         
             if choose_action([alphat, 1-alphat])==0:
                 if input[0][ind]<option.dict_size:

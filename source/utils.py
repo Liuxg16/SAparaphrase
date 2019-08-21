@@ -479,6 +479,7 @@ def similarity_keyword_bleu_tensor_sent2vec_cuda(s1_list, s2, sta_vec, id2sen, e
 	sim_mat = torch.bmm(torch.bmm(norm2, emb_mat), norm1) # K,8,7
 	sim_vec,_ = torch.max(sim_mat,2)  # K,8
 	sim,_ = torch.min(sim_vec[:,wei2],1)
+	sim = torch.clamp(sim,0,1)
 	sim = np.power(sim.cpu().numpy(), M_kw)
 	
 	s1_raws = [' '.join(id2sen(s1, True)) for s1 in s1_list]
@@ -486,16 +487,10 @@ def similarity_keyword_bleu_tensor_sent2vec_cuda(s1_list, s2, sta_vec, id2sen, e
 	sent2_emb = sentmodel.embed_sentences([' '.join(id2sen(s2,True))])
 	emb1 = torch.tensor(sent1_emb, dtype=torch.float).cuda() # k,emb
 	emb2 = torch.tensor(sent2_emb, dtype = torch.float).cuda()
-	num = torch.matmul(emb1,emb2.transpose(0,1))
-	denom = torch.norm(emb1,p=2, dim=1) * torch.norm(emb2)
-	sentsim = num.squeeze()/(denom)
-	
-	emb1 = np.array(sent1_emb) # k,emb
-	emb2 = np.array(sent2_emb)
-	num = np.dot(emb1,emb2.T)
-	denom = np.linalg.norm(emb1, axis=1) * np.linalg.norm(emb2)
-	sentsim1 = num.squeeze()/(denom)
-	
+	num = torch.clamp(torch.matmul(emb1,emb2.transpose(0,1)),0,1)
+	denom = torch.clamp(torch.norm(emb1,p=2, dim=1) * torch.norm(emb2),1e-20)
+	sentsim = torch.clamp(num.squeeze()/(denom),0,1)
+		
 	for s1 in s1_list:
 	    actual_word_lists = [[id2sen(s2)]]
 	    generated_word_lists = [id2sen(s1)]

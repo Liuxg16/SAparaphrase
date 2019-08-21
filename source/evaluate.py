@@ -4,7 +4,6 @@ sys.path.append('/home/liuxg/workspace/SAparaphrase/bert')
 from utils import get_corpus_bleu_scores, savetexts
 from nltk.translate.bleu_score import corpus_bleu
 import nltk
-from rouge import Rouge
 from utils import appendtext
 import numpy as np
 
