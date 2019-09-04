@@ -383,7 +383,7 @@ def simulatedAnnealing(config):
 
             sen, V = sa(input_feed, sequence_length_feed, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
             #sen, V = sa_normal(input, sequence_length, sta_vec, id2sen, emb_word,session, mtest_forward, mtest_backward,option)
-            print(sen,V)
+            #print(sen,V)
             if maxV<V:
                 sampledsen = sen
                 maxV = V

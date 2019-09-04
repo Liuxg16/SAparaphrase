@@ -1,12 +1,9 @@
 import argparse, sys, torch
 sys.path.append('/home/liuxg/workspace/SAparaphrase/')
 sys.path.append('/home/liuxg/workspace/SAparaphrase/bert')
-from utils import get_corpus_bleu_scores, savetexts
 from nltk.translate.bleu_score import corpus_bleu
 import nltk
-from utils import appendtext
 import numpy as np
-#from rouge import Rouge
 import rouge
 
 class Option(object):
@@ -38,8 +35,6 @@ def main():
     elif option.mode =='semantic':
         evaluate_semantic(option.reference_path, option.generated_path)
     elif option.mode =='rouge':
-        evaluate_rouge(option.reference_path, option.generated_path, False)
-    elif option.mode =='multi-rouge':
         evaluate_rouge(option.reference_path, option.generated_path)
     else:
         print('not a valid argument')
@@ -110,6 +105,9 @@ def evaluate_bleu2(reference_path, generated_path):
                 actual_word_lists, generated_word_lists) ]
     print('sentence level bleu', np.mean(bleu_scores))
 
+
+
+
 def evaluate_semantic(reference_path, generated_path):
     actual_word_lists = []
     with open(reference_path) as f:
@@ -137,17 +135,40 @@ def evaluate_semantic(reference_path, generated_path):
     summation = torch.sum(rep1*rep2,1)/(rep1.norm(2,1)*rep2.norm(2,1))
     print(torch.mean(summation))
 
-def evaluate_rouge(reference_path, generated_path, multi=True):
+def evaluate_rouge1(reference_path, generated_path):
     # Evaluate model scores
     actual_word_lists = []
-    multi_flag = True
     with open(reference_path) as f:
         for line in f:
-            if multi:
+            if '#' in line:
+                sents = line.strip().lower().split('#')
+                actual_word_lists.append([[x for x in sents]])
+            else:
+                actual_word_lists.append(line.strip().lower())
+    generated_word_lists = []
+    with open(generated_path) as f:
+        for line in f:
+            generated_word_lists.append(line.strip().lower())
+    actual_word_lists = actual_word_lists[:len(generated_word_lists)]
+    print(actual_word_lists[0],len(generated_word_lists))
+    rouge = Rouge()
+    scores = rouge.get_scores(generated_word_lists, actual_word_lists, avg=True)
+    print(scores)
+
+def prepare_results(m, p, r, f):
+    return '\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}'.format(m, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
+
+
+def evaluate_rouge(reference_path, generated_path):
+    # Evaluate model scores
+    actual_word_lists = []
+    with open(reference_path) as f:
+        for line in f:
+            if '#' in line:
                 sents = line.strip().lower().split('#')
                 actual_word_lists.append([x for x in sents])
             else:
-                actual_word_lists.append([line.strip().lower()])
+                actual_word_lists.append(line.strip().lower())
     generated_word_lists = []
     with open(generated_path) as f:
         for line in f:
@@ -197,10 +218,6 @@ def evaluate_rouge(reference_path, generated_path, multi=True):
                         resampling=True, samples=1000, favor=True, p=0.5)
         score = rouge.calc_score()
         print(score)
-
-def prepare_results(m, p, r, f):
-    return '\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}'.format(m, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
-
 
 
 def test_semantic(s1, s2):

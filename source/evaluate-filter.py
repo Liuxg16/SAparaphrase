@@ -86,6 +86,7 @@ def evaluate_bleu(reference_path, generated_path):
     bleu_scores = [nltk.translate.bleu_score.sentence_bleu(a,g,
         smoothing_function=nltk.translate.bleu_score.SmoothingFunction().method1) for a,g in zip(\
                 actual_word_lists, generated_word_lists) ]
+    print(bleu_scores)
     print('sentence level bleu', np.mean(bleu_scores))
 
 def evaluate_bleu2(reference_path, generated_path):
